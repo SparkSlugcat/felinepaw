@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# 凭据与配置（切勿提交！）
+config.json
+fa_cookies.json
+*_cookies.json
+*.env
+
+# 打包/构建产物
+dist/
+build/
+*.spec
+
+# 第三方本地依赖目录
+_dsp_env/
+_pyi_env/
+venv/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+
+# 日志与临时文件
+*.log
+*.part
