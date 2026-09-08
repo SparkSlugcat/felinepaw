@@ -112,7 +112,7 @@ def parse_args():
 def make_session(adult_flag, proxy=None):
     """新建带 UA、代理和 adult_mode cookie 的 Session"""
     s = common.create_session(proxy, {"User-Agent": UA})
-    # adult_mode=1 显示成人内容；=0 只显示 safe
+    # adult_mode=1 显示成人内容；=0 只看 general/safe（站内模式名 general）
     s.cookies.set('adult_mode', '1' if adult_flag else '0', domain='bbooru.com')
     return s
 
