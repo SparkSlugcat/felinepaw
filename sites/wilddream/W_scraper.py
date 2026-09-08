@@ -1,14 +1,15 @@
 '''
 下载 WildDream 用户的某个漫画文件夹（等价于一个 pool）
 用法：
-    python W_scraper.py "https://www.wilddream.net/art/userpage/gallery?userpagename=xxx&folderid=485" [--limit 80|inf] [-o 输出根目录]
-特性：多线程收集前 limit 即停 / -o 建 <漫画名>/ 子文件夹 / 断点续传(.part+原子改名) / 礼貌请求(间隔+超时+重试)
+    python W_scraper.py "https://www.wilddream.net/art/userpage/gallery?userpagename=xxx&folderid=485" [--limit 80|inf] [-o 输出根目录] [--threads 8]
+特性：收集满 limit 即停 / -o 建 <漫画名>/ 子文件夹 / 断点续传(.part+原子改名) / 礼貌请求(每线程间隔+超时+重试) / 并发下载(--threads)
 '''
 
-import time, requests, os, re, sys, random
+import time, requests, os, re, sys, random, threading
 from lxml import etree
 from urllib.parse import urljoin, urlparse
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Windows GBK 控制台可能编不了个别字符（emoji 等）→ 打印时替换为 '?'，避免 UnicodeEncodeError 崩溃
 if hasattr(sys.stdout, "reconfigure"):
@@ -19,21 +20,22 @@ if hasattr(sys.stdout, "reconfigure"):
 main_site = 'https://www.wilddream.net/'
 headers = {"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36 Edg/152.0.0.0"}
 
-# ============ 礼貌请求层：复用连接 + 全局间隔 + 超时 + 轻量重试 ============
-_session = requests.Session()
+# ============ 礼貌请求层：复用连接 + 每线程间隔 + 超时 + 轻量重试 ============
+_session = requests.Session()            # Session 线程安全（urllib3 连接池）
 _session.headers.update(headers)
-_last_req_ts = 0.0
-MIN_GAP = 0.5                 # 两次请求的最小间隔（秒）
+_tl = threading.local()                  # 每个线程独立的节流计时
+MIN_GAP = 0.5                            # 单线程内两次请求的最小间隔（秒）
 
 
 def throttle():
-    """保证两次请求之间至少隔 MIN_GAP(+随机抖动) 秒，避免被站点限流"""
-    global _last_req_ts
+    """单线程内保证两次请求至少隔 MIN_GAP(+随机抖动) 秒。
+    用线程局部变量，多线程并发下载时各线程独立限速，互不拖累。"""
+    last = getattr(_tl, "last_ts", 0.0)
     gap = MIN_GAP + random.uniform(0, 0.3)
-    wait = gap - (time.time() - _last_req_ts)
+    wait = gap - (time.time() - last)
     if wait > 0:
         time.sleep(wait)
-    _last_req_ts = time.time()
+    _tl.last_ts = time.time()
 
 
 def polite_get(url, timeout=20, stream=False, retries=2):
@@ -138,6 +140,8 @@ def parse_args():
                         help="最多下载张数：数字 或 inf(全部)；默认 80")
     parser.add_argument("-o", "--output", dest="output", default=".",
                         help="输出根目录（默认当前目录），会在其下建 <漫画名>/ 子文件夹")
+    parser.add_argument("--threads", type=int, default=8,
+                        help="下载并发线程数，默认 8")
     return parser.parse_args()
 
 
@@ -185,16 +189,27 @@ def main():
     os.makedirs(download_dir, exist_ok=True)
     print(f"下载目录：{download_dir}")
 
+    # ---- 并发下载：每个帖子 = 一个任务（详情页取图 + 下载）----
+    def process_one(post_url):
+        """返回 (status, label)，status ∈ ok/skip/fail"""
+        try:
+            img_url, img_name = get_single_post(post_url)
+            if not img_url:
+                return "fail", post_url
+            return download_single(img_url, img_name, download_dir), img_name
+        except Exception as e:              # 单个任务异常不拖垮整批
+            print(f"  [FAIL] {post_url} 处理异常：{e}")
+            return "fail", post_url
+
+    workers = max(1, min(args.threads, 32))
     ok = skip = fail = 0
-    for post_url in post_url_lis:
-        img_url, img_name = get_single_post(post_url)
-        if not img_url:
-            fail += 1
-            continue
-        st = download_single(img_url, img_name, download_dir)
-        ok += st == "ok"
-        skip += st == "skip"
-        fail += st == "fail"
+    with ThreadPoolExecutor(workers) as ex:
+        futs = {ex.submit(process_one, u): u for u in post_url_lis}
+        for fut in as_completed(futs):
+            st, label = fut.result()
+            ok += st == "ok"
+            skip += st == "skip"
+            fail += st == "fail"
 
     print("=" * 40)
     print(f"完成：成功 {ok}，已存在跳过 {skip}，失败 {fail}")
