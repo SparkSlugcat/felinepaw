@@ -30,14 +30,14 @@ Or launch the GUI: `python felinepaw_gui.py`
 | **e-hentai** | `sites/e-hentai/` | Official `gdata` API for metadata + HTML for image links |
 | **FurAffinity** | `sites/furaffinity/` | Title-normalization series detection; login via cookies (`FA_get_cookies.py`) |
 | **BBooru** | `sites/BBooru/B_scraper.py` | Gelbooru-style built-in JSON API, **no API key**. Tags (`--tags`) or pools (`--pool <show URL / id>`), auto HTML fallback, `--adult y/n` |
-| **WildDream** | `sites/wilddream/W_scraper.py` | Comic-gallery (folder) downloads from a gallery URL; polite throttling + atomic `.part` resume; `--limit` default 80 |
+| **WildDream** | `sites/wilddream/W_scraper.py` | Comic-gallery (folder) downloads from a gallery URL; polite throttling + atomic `.part` resume; threaded (`--threads`); `--limit` default 80 |
 
 ## ✨ Common features / 通用特性
 
 - **Proxy auto-detect** — follows Windows system proxy / env vars (`--proxy off` to disable)
 - **`--limit`** — default 120 (WildDream: 80), `--limit N`, `--limit inf` (download everything)
 - **Resume** — existing files are skipped (atomic `.part` + rename on BBooru / WildDream)
-- **Concurrency** — threaded downloads (BBooru: `--threads`) with polite delays
+- **Concurrency** — threaded downloads (BBooru / WildDream: `--threads`) with polite delays
 - **No hardcoded credentials** — env vars / cookies only
 - **Console-safe output** — GBK-safe markers (no emoji that crash cp936 terminals)
 
@@ -58,12 +58,12 @@ python sites/e-hentai/EH_scraper_v2.py "https://e-hentai.org/g/xxx/yyy/" -o ./ga
 python sites/furaffinity/FA_get_cookies.py
 python sites/furaffinity/FA_scraper.py "https://www.furaffinity.net/view/xxx/" --cookies fa_cookies.json
 
-:: BBooru（JSON API；池子两种输入方式均可；--adult n 只看 safe）
+:: BBooru（JSON API；池子两种输入方式均可；--adult n 只看 general/safe，对应站内 set=general）
 python sites/BBooru/B_scraper.py --tags "cute fox" --limit 100 --threads 12 -o ./out
 python sites/BBooru/B_scraper.py --pool https://bbooru.com/index.php?page=pool&s=show&id=33976 -o ./out
 
-:: WildDream（整本漫画；URL 两种形态自动兼容）
-python sites/wilddream/W_scraper.py "https://www.wilddream.net/art/userpage/gallery?userpagename=xxx&folderid=485" --limit inf -o ./out
+:: WildDream（整本漫画；URL 两种形态自动兼容；--threads 并发下载）
+python sites/wilddream/W_scraper.py "https://www.wilddream.net/art/userpage/gallery?userpagename=xxx&folderid=485" --limit inf --threads 12 -o ./out
 ```
 
 Dependencies: `requests` (+ `lxml` for e-hentai / FA / WildDream, + DrissionPage for yiff-auto / FA cookies).
