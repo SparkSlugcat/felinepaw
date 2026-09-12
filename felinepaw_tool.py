@@ -48,8 +48,11 @@ WHITELIST = {
     "yiff_auto_scraper.py": ["-o", "--limit", "--proxy", "--max-pages", "--headless"],
     "EH_scraper_v2.py": ["-o", "--limit", "--proxy", "-w", "-d"],
     "FA_scraper.py": ["-o", "--limit", "--proxy", "-w", "-d", "--cookies"],
-    "B_scraper.py": ["-o", "--limit", "--proxy", "--adult", "--name", "--retry", "--dry-run"],
+    "B_scraper.py": ["-o", "--limit", "--proxy", "--adult", "--name", "--retry", "--dry-run",
+                     "--mode", "--page", "--skip-others", "--pool-rev", "--force-pool-check"],
     "W_scraper.py": ["-o", "--limit"],
+    "H_scraper.py": ["-o", "--limit", "--proxy", "--adult", "--name", "--dry-run", "--page"],
+    "R_scraper.py": ["-o", "--limit", "--proxy", "--dry-run", "--page"],
 }
 
 
@@ -103,8 +106,18 @@ def build_command(site: str, args) -> list:
             raise ValueError("bbooru 的 --tags 与 --pool 只能二选一")
         if args.pool:
             pos_args += ["--pool", args.pool]          # 合集：show 页 URL 或纯 id
+            if args.pool_rev:
+                pos_args += ["--pool-rev"]
         elif args.tags:
             pos_args += ["--tags", args.tags]
+            if args.mode and args.mode != "tags":
+                pos_args += ["--mode", args.mode]          # artist 模式
+            if args.page is not None:
+                pos_args += ["--page", str(args.page)]
+            if args.skip_others:
+                pos_args += ["--skip-others"]
+            if args.force_pool_check:
+                pos_args += ["--force-pool-check"]
         else:
             raise ValueError("bbooru 需要 --tags <标签> 或 --pool <show页URL/id>")
         # bbooru 的并发参数是 --threads，把通用 -w 映射过去
@@ -116,11 +129,36 @@ def build_command(site: str, args) -> list:
             raise ValueError("wilddream 需要画廊 URL（目标框）")
         script = "W_scraper.py"
         pos_args += [args.target]
+        # wilddream 的并发参数是 --threads，把通用 -w 映射过去
+        if args.workers:
+            pos_args += ["--threads", str(args.workers)]
+
+    elif site == "hypnohub":
+        if not args.tags:
+            raise ValueError("hypnohub 需要 --tags <标签>")
+        script = "H_scraper.py"
+        pos_args += ["--tags", args.tags]
+        if args.page is not None:
+            pos_args += ["--page", str(args.page)]
+        # H_scraper 的并发参数是 --threads，把通用 -w 映射过去
+        if args.workers:
+            pos_args += ["--threads", str(args.workers)]
+
+    elif site == "rule34us":
+        if not args.tags:
+            raise ValueError("rule34us 需要 --tags <标签>")
+        script = "R_scraper.py"
+        pos_args += ["--tags", args.tags]
+        if args.page is not None:
+            pos_args += ["--page", str(args.page)]
+        # R_scraper 的并发参数是 --threads，把通用 -w 映射过去
+        if args.workers:
+            pos_args += ["--threads", str(args.workers)]
 
     else:
-        raise ValueError(f"未知站点: {site}（可用: e621/e926/yiff/ehentai/fa/bbooru/wilddream）")
+        raise ValueError(f"未知站点: {site}（可用: e621/e926/yiff/ehentai/fa/bbooru/wilddream/hypnohub/rule34us）")
 
-    site_dir = {"bbooru": "BBooru"}.get(site, site)
+    site_dir = {"bbooru": "BBooru", "hypnohub": "hypnohub", "rule34us": "rule34us"}.get(site, site)
     if site in ("e621", "e926"):
         site_dir = "e621"
     cmd = [sys.executable, str(HERE / "sites" / site_dir / script)] + pos_args
@@ -139,7 +177,7 @@ def build_command(site: str, args) -> list:
     _add("-o", args.output)
     _add("--limit", args.limit)
     _add("--proxy", args.proxy)
-    if site != "bbooru":           # bbooru 的 -w 已在上面映射为 --threads
+    if site not in ("bbooru", "wilddream", "hypnohub", "rule34us"):   # 这些站的 -w 已在上面映射为 --threads
         _add("-w", args.workers)
     _add("-d", args.delay)
     _add("--cookies", args.cookies)
@@ -152,16 +190,19 @@ def main():
     parser = argparse.ArgumentParser(
         description="felinepaw 一体化工具：统一调度 e621/yiff/e-hentai/furaffinity/bbooru/wilddream 脚本")
     parser.add_argument("site",
-                        choices=["e621", "e926", "yiff", "ehentai", "fa", "bbooru", "wilddream"],
-                        help="站点（e926 为 e621 安全版；bbooru 用 --tags/--pool；wilddream 用画廊 URL）")
-    # e621 模式
-    parser.add_argument("--mode", choices=["tags", "page", "artist", "pool", "pool-rev"],
-                        help="e621 下载模式")
+                        choices=["e621", "e926", "yiff", "ehentai", "fa", "bbooru", "wilddream", "hypnohub", "rule34us"],
+                        help="站点（e926 为 e621 安全版；bbooru 用 --tags/--pool；wilddream 用画廊 URL；hypnohub/rule34us 用 --tags）")
+    # e621 模式（也是 bbooru 模式选择）
+    parser.add_argument("--mode", choices=["tags", "page", "artist", "pool", "pool-rev", "auto", "api", "html"],
+                        help="e621/bbooru 下载模式（bbooru: auto/api/html/artist）")
     parser.add_argument("--tags", help="标签（e621/bbooru 用）")
     parser.add_argument("--pool", default=None,
                         help="bbooru 合集：pool show 页 URL 或纯 id（与 --tags 二选一）")
-    parser.add_argument("--page", type=int, help="页码（e621 page 模式）")
+    parser.add_argument("--page", type=int, help="页码（e621 page 模式 / bbooru --page）")
     parser.add_argument("--skip-others", action="store_true", help="艺术家模式跳过非池作品")
+    parser.add_argument("--pool-rev", action="store_true", help="pool 反转编号（bbooru）")
+    parser.add_argument("--force-pool-check", action="store_true",
+                        help="bbooru artist 模式：全量查询每个帖子的 pool 归属（默认只查前 10 个）")
     parser.add_argument("target", nargs="?",
                         help="目标：yiff=标签；pool/ehentai/fa=URL；wilddream=画廊 URL")
     # 通用
