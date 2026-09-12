@@ -22,8 +22,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import felinepaw_tool as tool
 
-SITES = ["e621", "e926", "yiff", "ehentai", "fa", "bbooru", "wilddream"]
+SITES = ["e621", "e926", "yiff", "ehentai", "fa", "bbooru", "wilddream", "hypnohub", "rule34us"]
 E621_MODES = ["tags", "page", "artist", "pool", "pool-rev"]
+BBOORU_MODES = ["auto", "api", "html", "artist"]
 
 
 class FelinepawGUI:
@@ -47,10 +48,12 @@ class FelinepawGUI:
         site_cb.grid(row=0, column=1, padx=2, pady=6, sticky="w")
         site_cb.bind("<<ComboboxSelected>>", lambda e: self._on_site())
 
-        ttk.Label(bar, text="模式(e621):").grid(row=0, column=2, padx=(12, 2), pady=6, sticky="e")
+        self.mode_label = ttk.Label(bar, text="模式(e621):")
+        self.mode_label.grid(row=0, column=2, padx=(12, 2), pady=6, sticky="e")
         self.mode_var = tk.StringVar(value="tags")
-        ttk.Combobox(bar, textvariable=self.mode_var, values=E621_MODES,
-                     state="readonly", width=9).grid(row=0, column=3, padx=2, pady=6, sticky="w")
+        self.mode_cb = ttk.Combobox(bar, textvariable=self.mode_var, values=E621_MODES,
+                                     state="readonly", width=9)
+        self.mode_cb.grid(row=0, column=3, padx=2, pady=6, sticky="w")
 
         ttk.Label(bar, text="目标/标签:").grid(row=1, column=0, padx=(8, 2), pady=6, sticky="e")
         self.target_var = tk.StringVar()
@@ -74,8 +77,23 @@ class FelinepawGUI:
         ttk.Label(bar, text="代理:").grid(row=4, column=2, padx=(12, 2), pady=6, sticky="e")
         self.proxy_var = tk.StringVar()
         ttk.Entry(bar, textvariable=self.proxy_var, width=24).grid(row=4, column=3, sticky="w", pady=6)
-        ttk.Label(bar, text="提示：代理留空=自动，off=直连；--limit 填 inf 表示全部",
-                  foreground="gray").grid(row=5, column=0, columnspan=4, padx=8, pady=(0, 4), sticky="w")
+
+        # 第 5 行：页码 + 高级选项（e621 page 模式 / bbooru --page / hypnohub --page）
+        ttk.Label(bar, text="页码(--page):").grid(row=5, column=0, padx=(8, 2), pady=6, sticky="e")
+        self.page_var = tk.StringVar()
+        ttk.Entry(bar, textvariable=self.page_var, width=10).grid(row=5, column=1, sticky="w", pady=6)
+        opts = ttk.Frame(bar)
+        opts.grid(row=5, column=2, columnspan=2, sticky="w", padx=(12, 2))
+        self.skip_others_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opts, text="artist 跳过非池帖", variable=self.skip_others_var).pack(side="left")
+        self.force_pool_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opts, text="全量查池", variable=self.force_pool_var).pack(side="left", padx=(8, 0))
+        self.pool_rev_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opts, text="pool 反转编号", variable=self.pool_rev_var).pack(side="left", padx=(8, 0))
+
+        ttk.Label(bar, text="提示：代理留空=自动，off=直连；--limit 填 inf 表示全部；"
+                            "页码留空=全部；选项仅对 bbooru 生效",
+                  foreground="gray").grid(row=6, column=0, columnspan=4, padx=8, pady=(0, 4), sticky="w")
         bar.columnconfigure(1, weight=1)
 
         act = ttk.Frame(self.root)
@@ -106,6 +124,16 @@ class FelinepawGUI:
         else:
             self.start_btn.config(state="normal")
             self.status_var.set("空闲")
+        # 按站点切换模式下拉
+        if site in ("e621", "e926"):
+            self.mode_label.config(text="模式(e621):")
+            self.mode_cb.config(values=E621_MODES)
+        elif site == "bbooru":
+            self.mode_label.config(text="模式(bbooru):")
+            self.mode_cb.config(values=BBOORU_MODES)
+        else:
+            self.mode_label.config(text="模式:")
+            self.mode_cb.config(values=[])
 
     def _pick_dir(self):
         d = filedialog.askdirectory(title="选择输出目录")
@@ -135,11 +163,20 @@ class FelinepawGUI:
             messagebox.showinfo("提示", "任务正在运行中")
             return
         site = self.site_var.get()
+        # 页码：留空 = None
+        page_txt = self.page_var.get().strip()
+        try:
+            page_val = int(page_txt) if page_txt else None
+        except ValueError:
+            messagebox.showwarning("参数错误", "页码必须填数字（留空表示不限制）")
+            return
         # 组装参数（复用 tool 的 build_command 规则）
         ns = {
             "site": site, "mode": self.mode_var.get(), "target": self.target_var.get().strip(),
-            "tags": self.tags_var.get().strip(), "page": None, "skip_others": False,
-            "pool": None,
+            "tags": self.tags_var.get().strip(), "page": page_val,
+            "skip_others": self.skip_others_var.get(),
+            "force_pool_check": self.force_pool_var.get(),
+            "pool": None, "pool_rev": self.pool_rev_var.get(),
             "output": self.out_var.get().strip() or None,
             "limit": self.limit_var.get().strip() or None,
             "proxy": self.proxy_var.get().strip() or None,
@@ -204,6 +241,10 @@ def argparse_fix(site, ns):
         if not a.target:
             raise ValueError("wilddream 需要画廊 URL（目标框）")
         a.tags = None
+    if site in ("hypnohub", "rule34us"):
+        if not a.tags:
+            raise ValueError(f"{site} 需要填标签(--tags)")
+        a.target = None
     return tool.build_command(site, a)
 
 
