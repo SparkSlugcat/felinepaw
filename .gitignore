@@ -13,6 +13,8 @@ fa_cookies.json
 dist/
 build/
 *.spec
+# 例外：GUI 的 PyInstaller 配方是仓库用户重新打包所必需的，必须提交
+!sites/BBooru/gui/BBooruDownloader.spec
 
 # 第三方本地依赖目录
 _dsp_env/
@@ -27,3 +29,7 @@ venv/
 # 日志与临时文件
 *.log
 *.part
+
+# 下载产物（勿提交！）
+诺瓦/
+伊萨维尔纪元』【督军理事会】/
