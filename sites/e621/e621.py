@@ -41,7 +41,7 @@ HEADERS = {
     "Cache-Control": "max-age=0",
     "Referer": "https://e621.net/",
 }
-API_BASE = "https://e621.net"          # 可改为 https://e926.net
+API_BASE = os.environ.get("E621_BASE", "https://e621.net")          # 可改为 https://e926.net
 REQUEST_DELAY = 1.0                    # 请求间隔（秒）
 POSTS_PER_REQUEST = 320                # 单次最多获取作品数
 MAX_RETRIES = 3

@@ -43,7 +43,7 @@ HEADERS = {
     "Connection": "keep-alive",
     "Referer": "https://e621.net/",
 }
-API_BASE = "https://e621.net"          # 可改为 https://e926.net
+API_BASE = os.environ.get("E621_BASE", "https://e621.net")          # 可改为 https://e926.net
 POSTS_PER_REQUEST = 320                # API 单次最大帖子数
 REQUEST_DELAY = 1.0                    # API 请求间隔（秒）
 MAX_RETRIES = 3
