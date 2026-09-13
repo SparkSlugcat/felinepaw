@@ -99,6 +99,24 @@ class ApiError(Exception):
     """API 请求/解析异常（触发 auto 回退到 HTML 模式）"""
 
 
+# ---- 取消支持（GUI「停止」按钮调用 request_cancel()）----
+_cancel = threading.Event()
+
+
+def request_cancel():
+    """请求停止当前任务（GUI 用）；已提交的下载会跑完，但不再继续排队。"""
+    _cancel.set()
+
+
+def reset_cancel():
+    """开始新任务前清除取消标志。"""
+    _cancel.clear()
+
+
+def is_cancelled():
+    return _cancel.is_set()
+
+
 # 每线程一个 requests.Session（复用 keep-alive 连接）
 _local = threading.local()
 
@@ -116,7 +134,7 @@ def get_extension_from_url(url, default='.jpg'):
     return ext if ext else default
 
 
-def parse_args():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="从 bbooru.com 下载原图：--tags 按标签（JSON API 优先），或 --pool 按合集（HTML）")
     parser.add_argument("--tags", default=None,
@@ -146,7 +164,7 @@ def parse_args():
                         help="--pool mode: reverse numbering order")
     parser.add_argument("--force-pool-check", action="store_true",
                         help="artist mode: force full post-pool-list query for all posts (default: check first 10 only)")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def make_session(adult_flag, proxy=None):
@@ -248,6 +266,9 @@ def api_collect_tasks(tags, limit, adult_flag, threads=8, proxy=None, page=None)
     print(f"API mode collect ({API_PAGE_SIZE} per page, {page_workers} concurrent) ...")
 
     while not done:
+        if is_cancelled():
+            print("[CANCEL] cancelled by user, stop collecting.")
+            break
         pids = [pid + i for i in range(page_workers)]
         results = {}
         with ThreadPoolExecutor(page_workers) as ex:
@@ -455,6 +476,9 @@ def artist_collect_tasks(tags, limit, adult_flag, threads=8, proxy=None,
         pid = 0
         done = False
         while not done:
+            if is_cancelled():
+                print("[CANCEL] cancelled by user, stop collecting.")
+                break
             pids = [pid + i for i in range(page_workers)]
             results = {}
             with ThreadPoolExecutor(page_workers) as ex:
@@ -704,6 +728,9 @@ def html_collect_tasks(tags, limit, adult_flag, threads=8, proxy=None):
     print(f"HTML mode collect ({HTML_PAGE_SIZE} per page, {page_workers} concurrent) ...")
 
     while not done:
+        if is_cancelled():
+            print("[CANCEL] cancelled by user, stop collecting.")
+            break
         pids = [pid + i * HTML_PAGE_SIZE for i in range(page_workers)]
         results = {}
         with ThreadPoolExecutor(page_workers) as ex:
@@ -793,6 +820,9 @@ def pool_collect_tasks(pool_id, limit=None, adult_flag=True, proxy=None, pool_re
     tasks, seen = [], set()
     pid = 0
     for _guard in range(200):                     # 防呆上限
+        if is_cancelled():
+            print("[CANCEL] cancelled by user, stop collecting.")
+            break
         url = pool_show_url(pool_id, pid)
         print(f"  Reading pool page pid={pid}: {url}")
         r = s.get(url, timeout=20)
@@ -904,10 +934,17 @@ def download_images(tasks, download_dir, adult_flag, threads=8, retries=2, proxy
     done_count = 0
     workers = max(1, min(threads, 32))
 
+    if is_cancelled():
+        print("[CANCEL] cancelled by user, skip downloading.")
+        return 0, 0
+
     with ThreadPoolExecutor(workers) as ex:
         futs = [ex.submit(download_one, t, download_dir, adult_flag, retries, proxy)
                 for t in tasks]
         for fut in as_completed(futs):
+            if is_cancelled():
+                print("[CANCEL] cancelled, stop waiting for remaining tasks.")
+                break
             done_count += 1
             item_id, status, info = fut.result()
             if status == 'ok':
@@ -960,6 +997,9 @@ def download_images_with_folders(tasks_with_folders, base_dir, adult_flag,
 
         futs = [ex.submit(_wrap, item) for item in flat_items]
         for fut in as_completed(futs):
+            if is_cancelled():
+                print("[CANCEL] cancelled, stop waiting for remaining tasks.")
+                break
             done_count += 1
             item_id, status, info = fut.result()
             if status == 'ok':
@@ -978,8 +1018,9 @@ def download_images_with_folders(tasks_with_folders, base_dir, adult_flag,
     return ok, fail
 
 
-def main():
-    args = parse_args()
+def main(argv=None):
+    reset_cancel()                      # 每次运行清除上次的取消标志（GUI 可重复运行）
+    args = parse_args(argv)
     if args.threads < 1:
         print("--threads must be >= 1")
         return
