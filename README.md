@@ -32,7 +32,7 @@ Or launch the GUI: `python felinepaw_gui.py`
 | **yiffverse** | `sites/yiff/` | SSR + browser-auto (DrissionPage) variants; no pools, tag-based |
 | **e-hentai** | `sites/e-hentai/` | Official `gdata` API for metadata + HTML for image links |
 | **FurAffinity** | `sites/furaffinity/` | Title-normalization series detection; login via cookies (`FA_get_cookies.py`) |
-| **BBooru** | `sites/BBooru/B_scraper.py` | Gelbooru-style built-in JSON API, **no API key**. Tags (`--tags`), pools (`--pool <show URL / id>`), auto HTML fallback, `--adult y/n`, **artist mode** (pool-grouped download) |
+| **BBooru** | `sites/BBooru/B_scraper.py` | Gelbooru-style built-in JSON API, **no API key**. Tags (`--tags`), pools (`--pool <show URL / id>`), auto HTML fallback, `--adult y/n`, **artist mode** (pool-grouped download), **GUI/exe** in `gui/` |
 | **WildDream** | `sites/wilddream/W_scraper.py` | Comic-gallery (folder) downloads from a gallery URL; polite throttling + atomic `.part` resume; threaded (`--threads`); `--limit` default 80 |
 | **HypnoHub** | `sites/hypnohub/H_scraper.py` | Gelbooru/Shimmie engine, **HTML only** (no usable JSON API); original taken from `img#image`; `--page` for a single page |
 | **Rule34.us** | `sites/rule34us/R_scraper.py` | Custom engine, **HTML only**; original linked by `<li class="character-tag">Original</li>`; automatic pagination probe |
@@ -102,6 +102,24 @@ Only the first 10 posts are probed by default; if none of them belongs to a pool
 checks are skipped — that is the common case, since most tags have no pools at all. Use
 `--force-pool-check` for a full scan when you suspect pools appear later in the list.
 
+## 🖥 BBooru GUI / standalone exe（图形界面版）
+
+Don't want to touch the command line? `sites/BBooru/gui/` wraps the same engine in a tkinter GUI
+and can be frozen into a single `.exe`:
+
+```bat
+python sites/BBooru/gui/app.py      :: run the GUI from source
+cd sites/BBooru/gui & build_exe.bat :: build dist\BBooruDownloader.exe (needs PyInstaller)
+```
+
+The GUI calls `B_scraper.main(argv)` **in-process** (no subprocess), pipes the engine log into the
+window and wires the Stop button to the engine's `request_cancel()`. It exposes the same three
+modes as the CLI: tags / pool / artist.
+
+> Prebuilt `BBooruDownloader.exe` is published under
+> [Releases](../../releases) rather than committed here — a 12 MB binary in git history would
+> bloat every clone forever.
+
 ## 🔒 Security / 安全
 
 - Scripts contain **no real credentials**. e621 keys come from env vars; FA uses a local cookies file.
@@ -137,6 +155,7 @@ felinepaw/
     ├── yiff/               # yiff_scraper.py + yiff_auto_scraper.py (browser)
     ├── furaffinity/        # FA_scraper.py + FA_get_cookies.py
     ├── BBooru/             # B_scraper.py (JSON API tags / pools / artist mode)
+    │   └── gui/            # app.py + BBooruDownloader.spec (tkinter GUI / single-file exe)
     ├── wilddream/          # W_scraper.py (comic gallery downloader)
     ├── hypnohub/           # H_scraper.py (HTML only)
     └── rule34us/           # R_scraper.py (HTML only)
