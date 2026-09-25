@@ -40,19 +40,6 @@ if hasattr(sys.stdout, "reconfigure"):
         sys.stderr.reconfigure(errors="replace")
     except Exception:
         pass
-import builtins as _builtins
-_orig_print = _builtins.print
-def _safe_print(*args, **kwargs):
-    new_args = []
-    for a in args:
-        if isinstance(a, str):
-            try:
-                a.encode(sys.stdout.encoding or 'utf-8', errors='replace')
-            except (UnicodeEncodeError, LookupError):
-                a = a.encode('gbk', errors='replace').decode('gbk')
-        new_args.append(a)
-    _orig_print(*new_args, **kwargs)
-_builtins.print = _safe_print
 
 # ---- 定位并导入共享模块 common.py（felinepaw 基础库） ----
 _here = os.path.dirname(os.path.abspath(__file__))
