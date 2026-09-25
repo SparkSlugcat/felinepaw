@@ -126,6 +126,21 @@ modes as the CLI: tags / pool / artist.
 - `fa_cookies.json` and any `config.json` are **sensitive** — never commit them (see `.gitignore`).
 - Downloaded content folders are **not** part of the repo — keep them out of commits.
 
+## 🐞 Known issues / 已知问题
+
+Found and reproduced while building the sister project **pixivpaw** (a pixiv downloader that
+copies `common.py`). Only **measured** issues are listed here — no speculation.
+Full write-ups live in [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md).
+
+| # | Issue | Affects | Status |
+|---|---|---|---|
+| 1 | `_safe_print` was dead code: `str.encode(enc, errors="replace")` can never raise, so its `except (UnicodeEncodeError, LookupError)` branch was unreachable and the wrapper only forwarded the original string. Measured with `PYTHONIOENCODING=gbk` — output was **byte-identical with and without the patch**; the `reconfigure(errors="replace")` lines *above* it are what actually prevent the crash. It also read `sys.stdout.encoding` unguarded, which raises `AttributeError` when stdout is `None` (e.g. a `--noconsole` frozen build). | `sites/BBooru/B_scraper.py`, `sites/hypnohub/H_scraper.py`, `sites/rule34us/R_scraper.py` — three byte-for-byte identical copies | ✅ **Fixed 2026-09-22** — all three copies deleted; `reconfigure(errors="replace")` alone was always sufficient |
+
+> **中文小结**：那段 `_safe_print` 补丁实测无效 —— 真正起作用的是它上面 4 行的
+> `reconfigure(errors="replace")`；它在 3 个站点各复制了一份，**已于 2026-09-22 三处一并删除**。
+> 保留此条只作记录：`sites/wilddream/W_scraper.py` 只有 `reconfigure`，那才是正确写法。
+> 复现与推理过程见 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)。
+
 ## ⚠️ Disclaimers / 免责声明
 
 - These tools are intended **only for personal appreciation, translation and learning**.
@@ -147,6 +162,7 @@ modes as the CLI: tags / pool / artist.
 ```
 felinepaw/
 ├── common.py               # shared base library
+├── KNOWN_ISSUES.md         # verified issues, with repro + suggested fixes
 ├── felinepaw_tool.py       # unified CLI launcher (all sites, whitelist param passthrough)
 ├── felinepaw_gui.py        # unified tkinter GUI
 └── sites/
