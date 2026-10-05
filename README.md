@@ -11,6 +11,11 @@ A unified launcher ([`felinepaw_tool.py`](felinepaw_tool.py), CLI + tkinter GUI)
 >
 > 如果这个项目对你有帮助，欢迎点个 ⭐ Star，非常感谢！
 
+> 🖥 **Prefer a window over the terminal? / 不想敲命令行？**
+> Try **[e621-downloader](https://github.com/SparkSlugcat/e621-downloader)** — a standalone GUI for
+> e621 with a **no-install `.exe`**, bilingual UI and tag / page / artist modes.
+> / 试试同系列的 **e621 图形界面版**：免装 Python，下载 exe 双击即用。
+
 ---
 
 ## 🚀 Quick start / 快速上手（统一入口）
@@ -30,7 +35,7 @@ Or launch the GUI: `python felinepaw_gui.py`
 
 | Site | Scripts | Notes |
 |---|---|---|
-| **e621 / e926** | `sites/e621/` | Official JSON API. Credentials via `E621_USER` / `E621_KEY` env vars (guest if unset) |
+| **e621 / e926** | `sites/e621/` | Official JSON API. Credentials via `E621_USER` / `E621_KEY` env vars (guest if unset). 🖥 **GUI version → [e621-downloader](https://github.com/SparkSlugcat/e621-downloader)** |
 | **yiffverse** | `sites/yiff/` | SSR + browser-auto (DrissionPage) variants; no pools, tag-based |
 | **e-hentai** | `sites/e-hentai/` | Official `gdata` API for metadata + HTML for image links. **Tag search** (`--tags`), **dry-run list + pick by index** (`--dry-run` / `--pick 2-4,7`), cursor paging (`&next=<gid>`) |
 | **FurAffinity** | `sites/furaffinity/` | Title-normalization series detection; login via cookies (`FA_get_cookies.py`) |
@@ -194,10 +199,23 @@ Full write-ups live in [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md).
   scripts include adult-rated content by default (`--adult`), use responsibly.
 - Use at your own risk. The author is not liable for downloaded content or account safety.
 
-## 🔗 Related
+## 🔗 Related / 相关项目
 
-- [e621-downloader](https://github.com/SparkSlugcat/e621-downloader) — the GUI version of the e621
-  downloader (tkinter, bilingual UI, standalone exe). CLI scripts here share its engine concepts.
+### 🖥 [e621-downloader](https://github.com/SparkSlugcat/e621-downloader) — e621 的图形界面版
+
+不想敲命令行？这是 e621 专用的 tkinter GUI，**免装 Python**，下载一个 exe 双击就能用。
+
+[![Latest release](https://img.shields.io/github/v/release/SparkSlugcat/e621-downloader?label=Download&style=for-the-badge&color=brightgreen)](https://github.com/SparkSlugcat/e621-downloader/releases/latest)
+[![Stars](https://img.shields.io/github/stars/SparkSlugcat/e621-downloader?style=for-the-badge&color=yellow)](https://github.com/SparkSlugcat/e621-downloader/stargazers)
+
+- **No Python required** — grab `E621Downloader.exe` from
+  [Releases](https://github.com/SparkSlugcat/e621-downloader/releases/latest) and double-click
+- **Tag / Tag-page / Artist** download modes, bilingual (中文 / English) UI, live log + Stop button
+- Shares the same engine design as the CLI scripts in [`sites/e621/`](sites/e621/) here
+
+> 💡 一句话：**想要命令行** → 用本仓库的 `sites/e621/`；**想要鼠标点** → 用 e621-downloader。
+
+---
 
 ## 📁 Layout / 结构
 
@@ -222,3 +240,10 @@ felinepaw/
 ## License
 
 [MIT](LICENSE)
+
+## 🙏 Acknowledgements / 鸣谢
+
+感谢项目发布近一个月来所有点 star 的人（尽管只有我和另一个人），这将成为我更新的一大动力！
+
+Thanks to everyone who starred this project over its first month — even if it is just one other
+person and me, it is a real motivation to keep shipping.
