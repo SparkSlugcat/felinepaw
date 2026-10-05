@@ -174,7 +174,15 @@ modes as the CLI: tags / pool / artist.
 
 Found and reproduced while building the sister project **pixivpaw** (a pixiv downloader that
 copies `common.py`). Only **measured** issues are listed here — no speculation.
-Full write-ups live in [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md).
+Full write-ups live in [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), compiled with the help of the AI
+coding assistant **WorkBuddy** — every finding was reproduced and manually reviewed.
+
+> **Quick scan** — #1 a dead-code patch (removed); #2 e-hentai search needs **cursor paging**,
+> `&page=N` is silently ignored; #3 the unified CLI's site→directory mapping is fixed; #4 `--pick`
+> output filenames keep their **original list index**.
+>
+> **速览** —— #1 一段死代码补丁（已删除）；#2 e-hentai 搜索必须**游标翻页**，`&page=N` 会被静默忽略；
+> #3 统一入口的站点→目录映射已修；#4 `--pick` 落盘文件名保留**原名单序号**。
 
 | # | Issue | Affects | Status |
 |---|---|---|---|
@@ -182,11 +190,6 @@ Full write-ups live in [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md).
 | 2 | **e-hentai search pagination is cursor-based, not page-numbered.** `&page=0`, `&page=5` and `&page=50` returned the **same 25 galleries** (byte-identical gid sequence) — the parameter is silently ignored, so a "paginate by `page=N`" loop re-downloads page 1 forever without erroring. The real cursor is `&next=<gid>` (the last gid on the current page), taken from `<a id="unext">`. Total count comes from `Found about N results`. | `sites/e-hentai/EH_scraper_v2.py` (search mode) | ✅ **Fixed 2026-09-27** — cursor paging implemented; a probe now asserts `page=N` stays a no-op so a future revert gets caught |
 | 3 | **Two site→directory mappings in the unified CLI were wrong**: `ehentai` resolved to `sites/ehentai/` and `fa` to `sites/fa/`, but the actual folders are `sites/e-hentai/` and `sites/furaffinity/`. `python felinepaw_tool.py ehentai ...` therefore died with `[Errno 2] No such file or directory` — the paths never existed. (Running the site scripts directly was unaffected, which is why it went unnoticed.) | `felinepaw_tool.py` — `build_command()` | ✅ **Fixed 2026-09-27** — mapping table corrected (`ehentai → e-hentai`, `fa → furaffinity`); both routes verified end-to-end |
 | 4 | **(Lesson, not a live bug)** After `--pick 2-4`, files must keep their **original list index** (`2.* 3.* 4.*`), not be renumbered from 1. Renumbering makes a later `--pick 5-6` write `1.* 2.*`, which collides with existing files and gets silently skipped by the resume check. Also: the "already exists?" glob must exclude `.part`, or a half-written file permanently blocks its index. | e-hentai pick/resume logic | ✅ Avoided in implementation 2026-09-27 — see [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #4 |
-
-> **中文小结**：那段 `_safe_print` 补丁实测无效 —— 真正起作用的是它上面 4 行的
-> `reconfigure(errors="replace")`；它在 3 个站点各复制了一份，**已于 2026-09-22 三处一并删除**。
-> 保留此条只作记录：`sites/wilddream/W_scraper.py` 只有 `reconfigure`，那才是正确写法。
-> 复现与推理过程见 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)。
 
 ## ⚠️ Disclaimers / 免责声明
 
