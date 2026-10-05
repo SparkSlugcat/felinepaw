@@ -228,15 +228,22 @@ def parse_original_url(html, detail_url):
 # 下载
 # ============================================================
 
-def download_one(task, download_dir, adult_flag, retries, proxy=None):
+def download_one(task, download_dir, adult_flag, retries, proxy=None,
+                 pacing=None, force=False):
     """处理单个任务：先抓详情页取原图 URL，再下载。
-    返回 (item_id, ok/fail/skip, 说明)"""
+    返回 (item_id, ok/fail/skip, 说明)
+
+    pacing: common.Pacing —— 每次请求前限速；吃到 429/503 时让**全部线程**一起刹车。
+    force:  True = 重新下载已存在的文件（默认跳过）。
+    """
     item_id = task["id"]
     s = get_session(adult_flag, proxy)
     last_err = None
 
     for attempt in range(1 + retries):
         try:
+            if pacing is not None:
+                pacing.wait()
             # 进详情页找原图
             r = s.get(task["page"], timeout=20)
             r.raise_for_status()
@@ -249,7 +256,7 @@ def download_one(task, download_dir, adult_flag, retries, proxy=None):
             filename = sanitize_filename(item_id) + ext
             save_path = os.path.join(download_dir, filename)
 
-            if os.path.exists(save_path) and os.path.getsize(save_path) > 0:
+            if not force and os.path.exists(save_path) and os.path.getsize(save_path) > 0:
                 return (item_id, 'skip', filename)
 
             with s.get(url, timeout=120, stream=True) as img:
@@ -263,24 +270,34 @@ def download_one(task, download_dir, adult_flag, retries, proxy=None):
 
         except Exception as e:
             last_err = e
+            if pacing is not None and pacing.penalize_on_ratelimit(e):
+                print(f"[COOLDOWN] {item_id}: HTTP rate limited, all threads idle "
+                      f"{pacing.cooldown:.0f}s")
             if attempt < retries:
                 time.sleep(0.4 * (attempt + 1))
 
     return (item_id, 'fail', str(last_err))
 
 
-def download_images(tasks, download_dir, adult_flag, threads=8, retries=2, proxy=None):
+def download_images(tasks, download_dir, adult_flag, threads=8, retries=2, proxy=None,
+                    pacing=None, force=False):
     """多线程并发下载"""
     ensure_dir(download_dir)
     total = len(tasks)
     print(f"\nStarting download, {total} tasks, {threads} concurrent. Save dir: {download_dir}")
+    if pacing is not None and pacing.active:
+        print(f"Pacing: delay={pacing.delay}s jitter={pacing.jitter}s "
+              f"cooldown={pacing.cooldown}s")
+    if force:
+        print("Force mode: existing files will be re-downloaded")
 
     ok = fail = skip = 0
     done_count = 0
     workers = max(1, min(threads, 32))
 
     with ThreadPoolExecutor(workers) as ex:
-        futs = [ex.submit(download_one, t, download_dir, adult_flag, retries, proxy)
+        futs = [ex.submit(download_one, t, download_dir, adult_flag, retries, proxy,
+                          pacing, force)
                 for t in tasks]
         for fut in as_completed(futs):
             done_count += 1
@@ -322,6 +339,10 @@ def parse_args():
                         help="并发线程数（翻页+下载），默认 8")
     parser.add_argument("--retry", type=int, default=2,
                         help="单个任务失败重试次数，默认 2")
+    parser.add_argument("--force", action="store_true",
+                        help="重新下载已存在的图片（默认跳过；用于修复下到一半的坏文件）")
+    common.add_pacing_args(parser)
+    common.add_preflight_args(parser)
     parser.add_argument("--proxy", default=None,
                         help="代理: 留空=自动检测, off=直连, 或 http://127.0.0.1:7897")
     parser.add_argument("--dry-run", action="store_true",
@@ -356,6 +377,11 @@ def main():
         _p = common.normalize_proxy(args.proxy)
         print(f"Proxy: {_p}")
 
+    # ---- 预检（fail-fast）：Clash 没开时 1 秒说清，而不是卡几十秒再丢 ProxyError ----
+    if not common.run_preflight(args, BASE_URL, "hypnohub"):
+        return
+    pacing = common.make_pacing(args)
+
     # --limit
     limit = parse_limit(args.limit, 10 ** 9)
     if limit is None:
@@ -379,7 +405,8 @@ def main():
             print(f"  {t['id']}  {t['page']}")
         return
 
-    download_images(tasks, download_dir, adult_flag, args.threads, args.retry, _p)
+    download_images(tasks, download_dir, adult_flag, args.threads, args.retry, _p,
+                    pacing=pacing, force=args.force)
 
 
 if __name__ == "__main__":

@@ -413,10 +413,13 @@ def collect_tasks(tags, limit, proxy=None, threads=8, page=None):
 # 下载
 # ============================================================
 
-def download_one(task, download_dir, retries=2, proxy=None):
+def download_one(task, download_dir, retries=2, proxy=None,
+                 pacing=None, force=False):
     """下载一张原图。返回 (item_id, status, info)。
 
     状态: 'ok' / 'skip' / 'fail'
+    pacing: common.Pacing —— 每次请求前限速；吃到 429/503 时让**全部线程**一起刹车。
+    force:  True = 重新下载已存在的文件（默认跳过）。
     """
     item_id = task["id"]
     url = task["dl"]
@@ -428,11 +431,13 @@ def download_one(task, download_dir, retries=2, proxy=None):
 
     for attempt in range(1 + retries):
         try:
+            if pacing is not None:
+                pacing.wait()
             ext = get_extension_from_url(url)
             filename = sanitize_filename(item_id) + ext
             save_path = os.path.join(download_dir, filename)
 
-            if os.path.exists(save_path) and os.path.getsize(save_path) > 0:
+            if not force and os.path.exists(save_path) and os.path.getsize(save_path) > 0:
                 return (item_id, 'skip', filename)
 
             with s.get(url, timeout=120, stream=True) as img:
@@ -446,25 +451,34 @@ def download_one(task, download_dir, retries=2, proxy=None):
 
         except Exception as e:
             last_err = e
+            if pacing is not None and pacing.penalize_on_ratelimit(e):
+                print(f"[COOLDOWN] {item_id}: HTTP rate limited, all threads idle "
+                      f"{pacing.cooldown:.0f}s")
             if attempt < retries:
                 time.sleep(0.4 * (attempt + 1))
 
     return (item_id, 'fail', str(last_err))
 
 
-def download_images(tasks, download_dir, threads=8, retries=2, proxy=None):
+def download_images(tasks, download_dir, threads=8, retries=2, proxy=None,
+                    pacing=None, force=False):
     """多线程并发下载。"""
     ensure_dir(download_dir)
     total = len(tasks)
     print(f"\nStarting download, {total} tasks, {threads} concurrent.")
     print(f"Save dir: {download_dir}")
+    if pacing is not None and pacing.active:
+        print(f"Pacing: delay={pacing.delay}s jitter={pacing.jitter}s "
+              f"cooldown={pacing.cooldown}s")
+    if force:
+        print("Force mode: existing files will be re-downloaded")
 
     ok = fail = skip = 0
     done_count = 0
     workers = max(1, min(threads, 32))
 
     with ThreadPoolExecutor(workers) as ex:
-        futs = [ex.submit(download_one, t, download_dir, retries, proxy)
+        futs = [ex.submit(download_one, t, download_dir, retries, proxy, pacing, force)
                 for t in tasks]
         for fut in as_completed(futs):
             done_count += 1
@@ -504,6 +518,10 @@ def parse_args():
                         help="Download only a specific page number")
     parser.add_argument("--threads", type=int, default=8,
                         help="Concurrent download threads (default: 8)")
+    parser.add_argument("--force", action="store_true",
+                        help="Re-download files that already exist (default: skip them)")
+    common.add_pacing_args(parser)
+    common.add_preflight_args(parser)
     parser.add_argument("--dry-run", action="store_true",
                         help="Only collect metadata, do not download")
     return parser.parse_args()
@@ -531,6 +549,11 @@ def main():
         proxy = normalize_proxy(args.proxy)
         print(f"Proxy: {proxy}")
 
+    # ---- Preflight (fail-fast): say "Clash is down" in ~1s instead of hanging ----
+    if not common.run_preflight(args, LIST_URL, "rule34.us"):
+        return
+    pacing = common.make_pacing(args)
+
     # ---- limit 解析 ----
     limit = parse_limit(args.limit, 10 ** 9)
     if limit is None:
@@ -557,7 +580,8 @@ def main():
         return
 
     # ---- 下载 ----
-    download_images(tasks, download_dir, args.threads, proxy=proxy)
+    download_images(tasks, download_dir, args.threads, proxy=proxy,
+                    pacing=pacing, force=args.force)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,4 @@
+# Windows 批处理文件在任何平台检出时都保持 CRLF 换行。
+# 这是仓库级规则，不受每台机器上 core.autocrlf 配置的影响 ——
+# 别人 clone 之后拿到的 .bat 也不会因为换行符变成 LF 而跑不起来。
+*.bat text eol=crlf

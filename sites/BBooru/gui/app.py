@@ -334,6 +334,9 @@ def _selftest():
     ]
     ns = B_scraper.parse_args(["--tags", "_selftest_", "--limit", "1", "--dry-run"])
     lines.append(f"parse_args OK: tags={ns.tags} limit={ns.limit} dry_run={ns.dry_run}")
+    # 节流/预检参数（v1.1 起）：缺任何一个都说明打包时用了旧的 B_scraper.py
+    lines.append(f"pacing/preflight args: delay={ns.delay} jitter={ns.jitter} "
+                 f"cooldown={ns.cooldown} force={ns.force} no_preflight={ns.no_preflight}")
     lines.append(f"cancel API: reset={callable(B_scraper.reset_cancel)} "
                  f"request={callable(B_scraper.request_cancel)}")
     out = os.path.join(tempfile.gettempdir(), "bbooru_selftest.txt")
