@@ -1,8 +1,10 @@
 # 🐾 felinepaw
 
 Multi-site furry image downloader scripts — **e621 / yiffverse / e-hentai / FurAffinity / BBooru / WildDream / HypnoHub / Rule34.us** in one place.
-All scripts share the same CLI conventions (`-o`, `--limit`, `--proxy`, `-w`, `-d`) and a common
-base library ([`common.py`](common.py)) for proxy detection, sessions, resume and limits.
+All scripts share the same CLI conventions (`-o`, `--limit`, `--proxy`, `-w`, `-d`,
+`--delay`, `--jitter`, `--cooldown`, `--force`) and a common
+base library ([`common.py`](common.py)) for proxy detection, sessions, resume, limits,
+request pacing and a fail-fast proxy preflight.
 A unified launcher ([`felinepaw_tool.py`](felinepaw_tool.py), CLI + tkinter GUI) dispatches all sites from one command.
 
 > ⭐ If this project helps you, a Star would mean a lot. Thanks!
@@ -30,7 +32,7 @@ Or launch the GUI: `python felinepaw_gui.py`
 |---|---|---|
 | **e621 / e926** | `sites/e621/` | Official JSON API. Credentials via `E621_USER` / `E621_KEY` env vars (guest if unset) |
 | **yiffverse** | `sites/yiff/` | SSR + browser-auto (DrissionPage) variants; no pools, tag-based |
-| **e-hentai** | `sites/e-hentai/` | Official `gdata` API for metadata + HTML for image links |
+| **e-hentai** | `sites/e-hentai/` | Official `gdata` API for metadata + HTML for image links. **Tag search** (`--tags`), **dry-run list + pick by index** (`--dry-run` / `--pick 2-4,7`), cursor paging (`&next=<gid>`) |
 | **FurAffinity** | `sites/furaffinity/` | Title-normalization series detection; login via cookies (`FA_get_cookies.py`) |
 | **BBooru** | `sites/BBooru/B_scraper.py` | Gelbooru-style built-in JSON API, **no API key**. Tags (`--tags`), pools (`--pool <show URL / id>`), auto HTML fallback, `--adult y/n`, **artist mode** (pool-grouped download), **GUI/exe** in `gui/` |
 | **WildDream** | `sites/wilddream/W_scraper.py` | Comic-gallery (folder) downloads from a gallery URL; polite throttling + atomic `.part` resume; threaded (`--threads`); `--limit` default 80 |
@@ -40,9 +42,25 @@ Or launch the GUI: `python felinepaw_gui.py`
 ## ✨ Common features / 通用特性
 
 - **Proxy auto-detect** — follows Windows system proxy / env vars (`--proxy off` to disable)
+- **Proxy preflight (fail-fast)** — before a run, one TCP probe + one no-retry GET tell you in
+  ~1s whether the proxy port is even listening, instead of hanging for tens of seconds on a
+  `ProxyError`. `--no-preflight` skips it. `proxy_down` / `bad_proxy_url` abort the run;
+  everything else only warns
 - **`--limit`** — default 120 (WildDream: 80), `--limit N`, `--limit inf` (download everything)
 - **Resume** — existing files are skipped (atomic `.part` + rename on BBooru / WildDream / HypnoHub / Rule34.us)
+- **`--force`** — re-download files that already exist (BBooru / HypnoHub / Rule34.us),
+  useful for repairing half-written images
+- **Request pacing** — BBooru / HypnoHub / Rule34.us accept `--delay` (base interval) and
+  `--jitter` (random extra), so traffic doesn't look machine-regular; on HTTP 429/503 every
+  worker thread backs off together for `--cooldown` seconds (default 20) instead of each
+  thread hitting the wall on its own. Defaults (`0` / `0`) keep the old behaviour
+  (e-hentai / FurAffinity use `-d` as a random delay cap, which equals `--delay 0 --jitter d`)
 - **Concurrency** — threaded downloads (BBooru / WildDream / HypnoHub / Rule34.us: `--threads`) with polite delays
+- **Named-list workflow (e-hentai)** — `--dry-run` prints the list **and** saves it to a JSON
+  manifest; `--pick 2-4,7` downloads exactly those rows. Search results drift as new uploads
+  appear, so the saved manifest is what makes `--pick` reproducible
+  (`--from-manifest eh_manifest.json --pick 2-4,7`). The same `--pick` syntax (`2-4,7` / `3-` /
+  `-3` / `all`) lives in `common.py`, so other sites can reuse it
 - **No hardcoded credentials** — env vars / cookies only
 - **Console-safe output** — GBK-safe ASCII markers (no emoji that crash cp936 terminals)
 - **Uniform file naming** — `p<post_id>.<ext>` across the booru sites, so resume works across modes
@@ -57,8 +75,20 @@ python sites/e621/e6_scraper.py --tags feline -o ./feline
 :: yiffverse（每标签 SSR 仅约 30 帖；浏览器版可滚动加载更多）
 python sites/yiff/yiff_scraper.py feline --limit 50
 
-:: e-hentai（画廊）
+:: e-hentai（单画廊）
 python sites/e-hentai/EH_scraper_v2.py "https://e-hentai.org/g/xxx/yyy/" -o ./gallery
+
+:: e-hentai（标签搜索 → 只看名单，不下载）
+python sites/e-hentai/EH_scraper_v2.py --tags "language:chinese$ female:anal" --limit 30 --dry-run
+
+:: e-hentai（挑着下：名单里的第 2,3,4,7 个）
+python sites/e-hentai/EH_scraper_v2.py --tags "language:chinese$" --limit 30 --pick 2-4,7
+
+:: e-hentai（精确复现：从名单文件挑，不受搜索结果变动影响）
+python sites/e-hentai/EH_scraper_v2.py --from-manifest eh_manifest.json --pick 2-4,7
+
+:: e-hentai（搜索模式下每个画廊只取前 5 张，免得一次拉满）
+python sites/e-hentai/EH_scraper_v2.py --tags "language:chinese$" --limit 30 --pages 5
 
 :: FurAffinity（需登录；先导出 cookies）
 python sites/furaffinity/FA_get_cookies.py
@@ -85,6 +115,15 @@ python sites/rule34us/R_scraper.py --tags landscape --limit 50 --threads 8 -o ./
 
 :: WildDream（整本漫画；URL 两种形态自动兼容；--threads 并发下载）
 python sites/wilddream/W_scraper.py "https://www.wilddream.net/art/userpage/gallery?userpagename=xxx&folderid=485" --limit inf --threads 12 -o ./out
+
+:: 被站点限速时：放慢节奏 + 撞到 429 时全体刹车（bbooru / hypnohub / rule34us）
+python sites/BBooru/B_scraper.py --tags fox --delay 1 --jitter 1.5 --cooldown 30 --threads 4 -o ./out
+
+:: 重新下载已存在的图（修下到一半的坏文件；bbooru / hypnohub / rule34us）
+python sites/hypnohub/H_scraper.py --tags spiral --force -o ./out
+
+:: 链路正常但预检误报时，跳过预检
+python sites/rule34us/R_scraper.py --tags landscape --no-preflight -o ./out
 ```
 
 Dependencies: `requests` (+ `lxml` for e-hentai / FA / WildDream, + DrissionPage for yiff-auto / FA cookies).
@@ -135,6 +174,9 @@ Full write-ups live in [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md).
 | # | Issue | Affects | Status |
 |---|---|---|---|
 | 1 | `_safe_print` was dead code: `str.encode(enc, errors="replace")` can never raise, so its `except (UnicodeEncodeError, LookupError)` branch was unreachable and the wrapper only forwarded the original string. Measured with `PYTHONIOENCODING=gbk` — output was **byte-identical with and without the patch**; the `reconfigure(errors="replace")` lines *above* it are what actually prevent the crash. It also read `sys.stdout.encoding` unguarded, which raises `AttributeError` when stdout is `None` (e.g. a `--noconsole` frozen build). | `sites/BBooru/B_scraper.py`, `sites/hypnohub/H_scraper.py`, `sites/rule34us/R_scraper.py` — three byte-for-byte identical copies | ✅ **Fixed 2026-09-22** — all three copies deleted; `reconfigure(errors="replace")` alone was always sufficient |
+| 2 | **e-hentai search pagination is cursor-based, not page-numbered.** `&page=0`, `&page=5` and `&page=50` returned the **same 25 galleries** (byte-identical gid sequence) — the parameter is silently ignored, so a "paginate by `page=N`" loop re-downloads page 1 forever without erroring. The real cursor is `&next=<gid>` (the last gid on the current page), taken from `<a id="unext">`. Total count comes from `Found about N results`. | `sites/e-hentai/EH_scraper_v2.py` (search mode) | ✅ **Fixed 2026-09-27** — cursor paging implemented; a probe now asserts `page=N` stays a no-op so a future revert gets caught |
+| 3 | **Two site→directory mappings in the unified CLI were wrong**: `ehentai` resolved to `sites/ehentai/` and `fa` to `sites/fa/`, but the actual folders are `sites/e-hentai/` and `sites/furaffinity/`. `python felinepaw_tool.py ehentai ...` therefore died with `[Errno 2] No such file or directory` — the paths never existed. (Running the site scripts directly was unaffected, which is why it went unnoticed.) | `felinepaw_tool.py` — `build_command()` | ✅ **Fixed 2026-09-27** — mapping table corrected (`ehentai → e-hentai`, `fa → furaffinity`); both routes verified end-to-end |
+| 4 | **(Lesson, not a live bug)** After `--pick 2-4`, files must keep their **original list index** (`2.* 3.* 4.*`), not be renumbered from 1. Renumbering makes a later `--pick 5-6` write `1.* 2.*`, which collides with existing files and gets silently skipped by the resume check. Also: the "already exists?" glob must exclude `.part`, or a half-written file permanently blocks its index. | e-hentai pick/resume logic | ✅ Avoided in implementation 2026-09-27 — see [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #4 |
 
 > **中文小结**：那段 `_safe_print` 补丁实测无效 —— 真正起作用的是它上面 4 行的
 > `reconfigure(errors="replace")`；它在 3 个站点各复制了一份，**已于 2026-09-22 三处一并删除**。

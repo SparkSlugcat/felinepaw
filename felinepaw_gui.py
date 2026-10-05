@@ -90,10 +90,28 @@ class FelinepawGUI:
         ttk.Checkbutton(opts, text="全量查池", variable=self.force_pool_var).pack(side="left", padx=(8, 0))
         self.pool_rev_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(opts, text="pool 反转编号", variable=self.pool_rev_var).pack(side="left", padx=(8, 0))
+        self.force_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opts, text="重新下载(--force)", variable=self.force_var).pack(side="left", padx=(8, 0))
+
+        # 第 6 行：e-hentai 专用（挑序号 / 每画廊限张 / 只列名单）
+        ttk.Label(bar, text="挑序号(--pick):").grid(row=6, column=0, padx=(8, 2), pady=6, sticky="e")
+        self.pick_var = tk.StringVar()
+        ttk.Entry(bar, textvariable=self.pick_var, width=14).grid(row=6, column=1, sticky="w", pady=6)
+        opts2 = ttk.Frame(bar)
+        opts2.grid(row=6, column=2, columnspan=2, sticky="w", padx=(12, 2))
+        ttk.Label(opts2, text="每画廊限张(--pages):").pack(side="left")
+        self.pages_var = tk.StringVar()
+        ttk.Entry(opts2, textvariable=self.pages_var, width=6).pack(side="left", padx=(2, 10))
+        self.dry_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opts2, text="只列名单(--dry-run)",
+                        variable=self.dry_var).pack(side="left")
 
         ttk.Label(bar, text="提示：代理留空=自动，off=直连；--limit 填 inf 表示全部；"
-                            "页码留空=全部；选项仅对 bbooru 生效",
-                  foreground="gray").grid(row=6, column=0, columnspan=4, padx=8, pady=(0, 4), sticky="w")
+                            "页码留空=全部；'重新下载' 对 bbooru/hypnohub/rule34us/e-hentai 生效；"
+                            "「挑序号」「只列名单」用于 e-hentai（如 2-4,7；"
+                            "搜索模式下标作用于画廊，单画廊模式作用于图片）",
+                  foreground="gray", wraplength=740, justify="left"
+                  ).grid(row=7, column=0, columnspan=4, padx=8, pady=(0, 4), sticky="w")
         bar.columnconfigure(1, weight=1)
 
         act = ttk.Frame(self.root)
@@ -181,6 +199,12 @@ class FelinepawGUI:
             "limit": self.limit_var.get().strip() or None,
             "proxy": self.proxy_var.get().strip() or None,
             "workers": None, "delay": None, "cookies": None,
+            "jitter": None, "cooldown": None, "force": self.force_var.get(),
+            "no_preflight": False,
+            "dry_run": self.dry_var.get(),
+            "pick": self.pick_var.get().strip() or None,
+            "pages": self.pages_var.get().strip() or None,
+            "from_manifest": None, "manifest": None,
             "auto": False, "max_pages": None, "headless": False,
         }
         try:
@@ -245,6 +269,10 @@ def argparse_fix(site, ns):
         if not a.tags:
             raise ValueError(f"{site} 需要填标签(--tags)")
         a.target = None
+    if site == "ehentai":
+        # 画廊 URL 走目标框，标签搜索走标签框；两者都没有就报错
+        if not (a.tags or a.target or getattr(a, "from_manifest", None)):
+            raise ValueError("ehentai 需要填画廊 URL（目标框）或标签（--tags）")
     return tool.build_command(site, a)
 
 

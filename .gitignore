@@ -30,6 +30,24 @@ venv/
 *.log
 *.part
 
-# 下载产物（勿提交！）
-诺瓦/
-伊萨维尔纪元』【督军理事会】/
+# ---------- 下载产物（勿提交！）----------
+# 各脚本不带 -o 直跑时会把图片下到 sites/ 或当前目录，这里用模式兜底。
+# 注意：不要写 *.png —— assets/icon.png 是仓库合法资产；*.ico 同理（gui 图标）。
+# 视频/图片扩展名：落在 sites/ 下的一律视为下载物
+sites/**/*.png
+sites/**/*.webp
+sites/**/*.jpg
+sites/**/*.jpeg
+sites/**/*.gif
+sites/**/*.mp4
+sites/**/*.webm
+# e-hentai：脚本生成的画廊目录 + 清单文件
+sites/*/eh_*/
+sites/*/eh_manifest.json
+# BBooru / WildDream：池目录与编号目录
+sites/*/pool_*/
+pool_*/
+# 根目录下以编号命名的下载目录（WildDream 无 -o 直跑时会这样落）
+/*/[0-9]/
+# 说明：根目录下形如 诺瓦/ 这类"漫画名"目录无法用模式匹配 ——
+# 跑 WildDream/BBooru 时请务必带 -o 指到图片库，不要留在仓库里。

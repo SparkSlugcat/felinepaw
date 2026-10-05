@@ -18,7 +18,8 @@ felinepaw_tool.py — 一体化工具 v1（统一 CLI 分发器）
     python felinepaw_tool.py wilddream "https://www.wilddream.net/art/userpage/gallery?userpagename=...&folderid=485" -o ./out
 
 通用参数（按站点脚本支持度自动透传）：
-    -o/--output  --limit  --proxy  -w/--workers  -d/--delay
+    -o/--output  --limit  --proxy  -w/--workers  -d/--delay  --jitter  --cooldown
+    --force  --no-preflight
 """
 
 import argparse
@@ -46,13 +47,18 @@ WHITELIST = {
     "e621.py": ["-o"],
     "yiff_scraper.py": ["-o", "--limit", "--proxy"],
     "yiff_auto_scraper.py": ["-o", "--limit", "--proxy", "--max-pages", "--headless"],
-    "EH_scraper_v2.py": ["-o", "--limit", "--proxy", "-w", "-d"],
+    "EH_scraper_v2.py": ["-o", "--limit", "--proxy", "-w", "-d", "--cooldown", "--force",
+                         "--no-preflight", "--dry-run", "--pick", "--pages",
+                         "--from-manifest", "--manifest"],
     "FA_scraper.py": ["-o", "--limit", "--proxy", "-w", "-d", "--cookies"],
     "B_scraper.py": ["-o", "--limit", "--proxy", "--adult", "--name", "--retry", "--dry-run",
-                     "--mode", "--page", "--skip-others", "--pool-rev", "--force-pool-check"],
+                     "--mode", "--page", "--skip-others", "--pool-rev", "--force-pool-check",
+                     "--delay", "--jitter", "--cooldown", "--force", "--no-preflight"],
     "W_scraper.py": ["-o", "--limit"],
-    "H_scraper.py": ["-o", "--limit", "--proxy", "--adult", "--name", "--dry-run", "--page"],
-    "R_scraper.py": ["-o", "--limit", "--proxy", "--dry-run", "--page"],
+    "H_scraper.py": ["-o", "--limit", "--proxy", "--adult", "--name", "--dry-run", "--page",
+                     "--delay", "--jitter", "--cooldown", "--force", "--no-preflight"],
+    "R_scraper.py": ["-o", "--limit", "--proxy", "--dry-run", "--page",
+                     "--delay", "--jitter", "--cooldown", "--force", "--no-preflight"],
 }
 
 
@@ -89,10 +95,14 @@ def build_command(site: str, args) -> list:
             pos_args += [args.target]
 
     elif site == "ehentai":
-        if not args.target:
-            raise ValueError("ehentai 需要画廊 URL")
         script = "EH_scraper_v2.py"
-        pos_args += [args.target]
+        if args.tags:
+            pos_args += ["--tags", args.tags]          # 标签搜索
+        elif args.target:
+            pos_args += [args.target]                  # 单画廊
+        # --from-manifest / --manifest / --pick / --pages 由下面的白名单透传处理
+        if not (args.tags or args.target or args.from_manifest):
+            raise ValueError("ehentai 需要画廊 URL、--tags <标签> 或 --from-manifest <名单>")
 
     elif site == "fa":
         if not args.target:
@@ -158,7 +168,10 @@ def build_command(site: str, args) -> list:
     else:
         raise ValueError(f"未知站点: {site}（可用: e621/e926/yiff/ehentai/fa/bbooru/wilddream/hypnohub/rule34us）")
 
-    site_dir = {"bbooru": "BBooru", "hypnohub": "hypnohub", "rule34us": "rule34us"}.get(site, site)
+    # ⚠️ 站点名 -> 目录名。不要想当然：目录用的是**带连字符/全称**的写法
+    #    （sites/e-hentai/、sites/furaffinity/），漏掉的会拼出不存在的路径。
+    site_dir = {"bbooru": "BBooru", "hypnohub": "hypnohub", "rule34us": "rule34us",
+                "ehentai": "e-hentai", "fa": "furaffinity"}.get(site, site)
     if site in ("e621", "e926"):
         site_dir = "e621"
     cmd = [sys.executable, str(HERE / "sites" / site_dir / script)] + pos_args
@@ -168,7 +181,7 @@ def build_command(site: str, args) -> list:
     def _add(flag, value):
         if value is not None and value is not False:
             if flag in allowed:
-                if flag == "--headless":
+                if flag in ("--headless", "--force", "--no-preflight", "--dry-run"):
                     cmd.extend([flag])
                 else:
                     cmd.extend([flag, str(value)])
@@ -179,7 +192,22 @@ def build_command(site: str, args) -> list:
     _add("--proxy", args.proxy)
     if site not in ("bbooru", "wilddream", "hypnohub", "rule34us"):   # 这些站的 -w 已在上面映射为 --threads
         _add("-w", args.workers)
-    _add("-d", args.delay)
+    # 延时参数的名字不统一：EH/FA 用 -d（随机延迟上限），
+    # bbooru/hypnohub/rule34us 用 --delay（基准）+ --jitter（抖动）。
+    # 换算关系：EH/FA 的 `-d N` ≡ bbooru 系的 `--delay 0 --jitter N`。
+    if script in ("EH_scraper_v2.py", "FA_scraper.py"):
+        _add("-d", args.delay)
+    else:
+        _add("--delay", args.delay)
+    _add("--jitter", getattr(args, "jitter", None))
+    _add("--cooldown", getattr(args, "cooldown", None))
+    _add("--force", getattr(args, "force", False))
+    _add("--no-preflight", getattr(args, "no_preflight", False))
+    _add("--dry-run", getattr(args, "dry_run", False))
+    _add("--pick", getattr(args, "pick", None))
+    _add("--pages", getattr(args, "pages", None))
+    _add("--from-manifest", getattr(args, "from_manifest", None))
+    _add("--manifest", getattr(args, "manifest", None))
     _add("--cookies", args.cookies)
     _add("--max-pages", args.max_pages)
     _add("--headless", args.headless)
@@ -210,7 +238,26 @@ def main():
     parser.add_argument("--limit", default=None, help="下载数量: 数字或 inf")
     parser.add_argument("--proxy", default=None, help="代理: 留空自动/off/URL")
     parser.add_argument("-w", "--workers", type=int, default=None, help="并发线程数")
-    parser.add_argument("-d", "--delay", type=float, default=None, help="随机延迟上限秒")
+    parser.add_argument("-d", "--delay", type=float, default=None,
+                        help="请求间隔秒：EH/FA 为随机延时上限；bbooru/hypnohub/rule34us 为基准延时")
+    parser.add_argument("--jitter", type=float, default=None,
+                        help="在 --delay 基础上叠加的随机抖动秒数（bbooru/hypnohub/rule34us）")
+    parser.add_argument("--cooldown", type=float, default=None,
+                        help="被限流(429/503)时全部线程一起安静多少秒，默认 20（bbooru/hypnohub/rule34us）")
+    parser.add_argument("--force", action="store_true",
+                        help="重新下载已存在的图片（bbooru/hypnohub/rule34us；默认跳过）")
+    parser.add_argument("--no-preflight", action="store_true",
+                        help="跳过发包前的代理预检（bbooru/hypnohub/rule34us/ehentai）")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="只拉名单不下载（bbooru/hypnohub/rule34us/ehentai）")
+    parser.add_argument("--pick", default=None,
+                        help="按名单序号挑着下，如 2-4,7（ehentai；编号 = dry-run 看到的 #）")
+    parser.add_argument("--pages", default=None,
+                        help="ehentai 搜索模式：每个画廊最多下 N 张图（默认全部）")
+    parser.add_argument("--from-manifest", default=None, metavar="FILE",
+                        help="ehentai：读 dry-run 存的名单文件，跳过搜索（配合 --pick 精确复现）")
+    parser.add_argument("--manifest", default=None,
+                        help="ehentai：dry-run 保存名单的文件名（默认 eh_manifest.json）")
     parser.add_argument("--cookies", default=None, help="FA cookies 文件")
     # yiff 自动版
     parser.add_argument("--auto", action="store_true", help="yiff 用浏览器滚动版")
