@@ -39,17 +39,19 @@ Or launch the GUI: `python felinepaw_gui.py`
 
 > 或者直接开图形界面：`python felinepaw_gui.py`
 
-**Windows: just double-click `启动.bat`.** It boots the GUI on a pinned local Python
-environment (no PATH fiddling) and runs an import self-check first, so a missing dependency
-shows up as a readable traceback instead of a window that silently never appears. Want no
-console flash at all? Double-click **`启动(无窗口).vbs`** instead.
+**Windows: just double-click `启动.bat`.** It auto-detects a local Python 3.9 environment
+(a conda `py39` under `%USERPROFILE%`, or whatever `PYTHON_EXE` points at — no PATH fiddling)
+and runs an import self-check first, so a missing dependency shows up as a readable traceback
+instead of a window that silently never appears. Want no console flash at all? Double-click
+**`启动(无窗口).vbs`** instead.
 
-> **Windows 用户：双击 `启动.bat` 就能开图形界面。** 它把界面挂在本机写死的 Python 环境上，
-> 不用你自己配 PATH；启动前先做一次导入自检，缺依赖时会把 traceback 直接打出来，而不是
-> "双击了没反应"。若想连那一闪而过的命令行窗口都省掉，双击 **`启动(无窗口).vbs`**。
+> **Windows 用户：双击 `启动.bat` 就能开图形界面。** 它会自动找到本机的 Python 3.9 环境
+> （`%USERPROFILE%` 下的 conda `py39`，或环境变量 `PYTHON_EXE` 指向的那个），不用你自己配 PATH；
+> 启动前先做一次导入自检，缺依赖时会把 traceback 直接打出来，而不是"双击了没反应"。
+> 若想连那一闪而过的命令行窗口都省掉，双击 **`启动(无窗口).vbs`**。
 >
-> ⚠️ `启动.bat` 顶部的 Python 路径按作者本机写死（`PY39` 那一行）；换机器或换了 conda
-> 环境，打开它改这一行即可。
+> ⚠️ 脚本里**不含任何写死的路径** —— 换机器、换 conda 环境都不用改文件；真找不到环境时，
+> 它会告诉你怎么用 `PYTHON_EXE` 指定。
 
 ## 📦 Sites / 支持的站点
 
@@ -321,7 +323,7 @@ felinepaw/
 ├── KNOWN_ISSUES.md         # verified issues, with repro + suggested fixes / 已复现的问题，含复现步骤与建议修法
 ├── felinepaw_tool.py       # unified CLI launcher (all sites, whitelist param passthrough) / 统一命令行入口（全站点，白名单参数透传）
 ├── felinepaw_gui.py        # unified tkinter GUI / 统一 tkinter 图形界面
-├── 启动.bat               # Windows: double-click → GUI (pinned env + import self-check) / Windows 双击启动图形界面（写死环境 + 导入自检）
+├── 启动.bat               # Windows: double-click → GUI (auto-detects Python + import self-check) / Windows 双击启动图形界面（自动定位 Python + 导入自检）
 ├── 启动(无窗口).vbs        # same, with zero console flash / 同上，零命令行窗口
 └── sites/
     ├── e621/               # 5 CLI scripts (tags / page / artist / pool / pool-reversed) / 5 个 CLI 脚本（标签 / 分页 / 画师 / 池子 / 池子反转）

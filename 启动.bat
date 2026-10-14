@@ -13,9 +13,9 @@ rem   Unicode，与代码页无关。）
 rem ============================================================
 rem  felinepaw 启动器 —— 双击直接打开图形界面
 rem
-rem  用写死的 py39 环境（requests / lxml / bs4 等依赖都装在那儿），
+rem  自动定位 py39 环境（requests / lxml / bs4 等依赖都装在那儿），
 rem  不依赖 PATH 里排第一的 python：本机 PATH 里第一个 python 是
-rem  3.13，没装本项目要的库，用它起不来。
+rem  3.13，没装本项目要的库，用它起不来。定位顺序见下面那段。
 rem
 rem  参数 silent：连"出错要按任意键"都免掉。只有
 rem  「启动(无窗口).vbs」会传它 —— 那个 .vbs 把本文件跑在一个
@@ -33,9 +33,23 @@ rem ============================================================
 set "SILENT="
 if /i "%~1"=="silent" set "SILENT=1"
 
-set "PY39=%USERPROFILE%\miniconda3\envs\py39"
-set "PY=%PY39%\python.exe"
-set "PYW=%PY39%\pythonw.exe"
+rem ==== 自动定位 Python 环境（本文件不含任何绝对路径 / 用户名）====
+rem  按顺序取第一个存在的：
+rem    1) 环境变量 PYTHON_EXE —— 想手动指定就用它
+rem    2) %USERPROFILE% 下 conda 的 py39 环境（miniconda3 / anaconda3）
+rem    3) 当前已激活的 conda 环境 %CONDA_PREFIX%
+rem    4) PATH 里第一个 python
+rem  换机器、换环境都不用改这个文件。
+set "PY="
+if defined PYTHON_EXE if exist "%PYTHON_EXE%" set "PY=%PYTHON_EXE%"
+if not defined PY if exist "%USERPROFILE%\miniconda3\envs\py39\python.exe" set "PY=%USERPROFILE%\miniconda3\envs\py39\python.exe"
+if not defined PY if exist "%USERPROFILE%\anaconda3\envs\py39\python.exe" set "PY=%USERPROFILE%\anaconda3\envs\py39\python.exe"
+if not defined PY if exist "%LOCALAPPDATA%\miniconda3\envs\py39\python.exe" set "PY=%LOCALAPPDATA%\miniconda3\envs\py39\python.exe"
+if not defined PY if exist "%LOCALAPPDATA%\Continuum\anaconda3\envs\py39\python.exe" set "PY=%LOCALAPPDATA%\Continuum\anaconda3\envs\py39\python.exe"
+if not defined PY if defined CONDA_PREFIX if exist "%CONDA_PREFIX%\python.exe" set "PY=%CONDA_PREFIX%\python.exe"
+if not defined PY for /f "delims=" %%I in ('where python 2^>nul') do if not defined PY set "PY=%%I"
+if defined PY for %%I in ("%PY%") do set "PYDIR=%%~dpI"
+set "PYW=%PYDIR%pythonw.exe"
 
 if not exist "%PY%"  goto :nopython
 if not exist "%PYW%" goto :nopython
@@ -59,10 +73,11 @@ exit /b 0
 
 :nopython
 echo.
-echo 没有找到 felinepaw 使用的 Python 环境：
-echo     %PY%
+echo 没有找到可用的 Python 环境（需要 requests / lxml / bs4 等依赖）。
 echo.
-echo 如果 conda 环境搬过位置，用记事本改本文件顶部的 PY39 那一行。
+echo 两种指定办法（任选其一）：
+echo   1) 在命令行先 set PYTHON_EXE=你的\python.exe 再跑本文件
+echo   2) 建一个名为 py39 的 conda 环境，脚本会自动找到它
 echo.
 if not defined SILENT pause
 exit /b 1
