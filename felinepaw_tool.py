@@ -233,8 +233,10 @@ def main():
     parser.add_argument("--tags", help="标签（e621/bbooru 用）")
     parser.add_argument("--pool", default=None,
                         help="bbooru 合集：pool show 页 URL 或纯 id（与 --tags 二选一）")
-    parser.add_argument("--page", type=int, help="页码（e621 page 模式 / bbooru --page）")
-    parser.add_argument("--skip-others", action="store_true", help="艺术家模式跳过非池作品")
+    parser.add_argument("--page", type=int,
+                        help="页码（e621 page 模式 / bbooru / hypnohub / rule34us）")
+    parser.add_argument("--skip-others", action="store_true",
+                        help="艺术家模式跳过非池作品（e621 / bbooru）")
     parser.add_argument("--pool-rev", action="store_true", help="pool 反转编号（bbooru）")
     parser.add_argument("--force-pool-check", action="store_true",
                         help="bbooru artist 模式：全量查询每个帖子的 pool 归属（默认只查前 10 个）")
@@ -252,19 +254,20 @@ def main():
     parser.add_argument("--cooldown", type=float, default=None,
                         help="被限流(429/503)时全部线程一起安静多少秒，默认 20（bbooru/hypnohub/rule34us）")
     parser.add_argument("--force", action="store_true",
-                        help="重新下载已存在的图片（bbooru/hypnohub/rule34us；默认跳过）")
+                        help="重新下载已存在的图片（bbooru/hypnohub/rule34us/ehentai；默认跳过）")
     parser.add_argument("--no-preflight", action="store_true",
                         help="跳过发包前的代理预检（bbooru/hypnohub/rule34us/ehentai）")
     parser.add_argument("--dry-run", action="store_true",
-                        help="只拉名单不下载（bbooru/hypnohub/rule34us/ehentai）")
+                        help="只拉名单不下载（e621 artist/bbooru/hypnohub/rule34us/ehentai）")
     parser.add_argument("--pick", default=None,
-                        help="按名单序号挑着下，如 2-4,7（ehentai；编号 = dry-run 看到的 #）")
+                        help="按名单序号挑着下，如 2-4,7（e621 artist/ehentai；编号 = dry-run 看到的 #）")
     parser.add_argument("--pages", default=None,
                         help="ehentai 搜索模式：每个画廊最多下 N 张图（默认全部）")
     parser.add_argument("--from-manifest", default=None, metavar="FILE",
-                        help="ehentai：读 dry-run 存的名单文件，跳过搜索（配合 --pick 精确复现）")
+                        help="e621 artist/ehentai：读 dry-run 存的名单文件，跳过搜索（配合 --pick 精确复现）")
     parser.add_argument("--manifest", default=None,
-                        help="ehentai：dry-run 保存名单的文件名（默认 eh_manifest.json）")
+                        help="e621 artist/ehentai：dry-run 保存名单的文件名"
+                             "（e621 默认 e6_artist_manifest.json，ehentai 默认 eh_manifest.json）")
     parser.add_argument("--cookies", default=None, help="FA cookies 文件")
     # yiff 自动版
     parser.add_argument("--auto", action="store_true", help="yiff 用浏览器滚动版")

@@ -53,6 +53,169 @@ instead of a window that silently never appears. Want no console flash at all? D
 > ⚠️ 脚本里**不含任何写死的路径** —— 换机器、换 conda 环境都不用改文件；真找不到环境时，
 > 它会告诉你怎么用 `PYTHON_EXE` 指定。
 
+## 🖥 GUI guide / 图形界面使用指南
+
+Prefer clicking to typing? `python felinepaw_gui.py` — or just double-click `启动.bat` on Windows —
+opens one window that drives every site. It has three parts:
+
+- **任务参数** — the form at the top. Every field maps to a command-line flag, shown in parentheses
+  next to its label, so the GUI and the CLI always agree.
+- **▶ 开始 / ■ 停止** — run or abort, with a live status line.
+- **运行日志** — the log pane at the bottom. Its **first line is the exact command being run**;
+  copy that into a terminal later if you want to automate the same job.
+
+> 不想敲命令行？`python felinepaw_gui.py`（Windows 上直接双击 `启动.bat`）会打开一个窗口，
+> 所有站点都在里面操作，界面分三块：
+>
+> - **任务参数** —— 最上面的表单。每一格都对应一个命令行参数（参数的原始名字写在它后面的括号里），
+>   所以 GUI 和命令行永远是同一套规则。
+> - **▶ 开始 / ■ 停止** —— 开始跑 / 中途叫停，右边显示当前状态。
+> - **运行日志** —— 最下面的大框。它**第一行会打印本次实际执行的命令**，想以后写脚本自动化，
+>   照抄那一行就行。
+
+### Fields / 参数逐项说明
+
+Every field on the form, what it sets, and the one trap worth knowing:
+
+> 表单上每一格的用途，以及各自需要注意的地方：
+
+| Field / 控件 | Flag | What it does |
+|---|---|---|
+| **站点** | `site` | 选下载站：`e621`、`e926`、`yiff`、`ehentai`、`fa`、`bbooru`、`wilddream`、`hypnohub`、`rule34us`。选 `e926` 时「开始」会被禁用（被 Cloudflare 拦，纯 requests 进不去） |
+| **模式** | `--mode` | **只对 `e621` 和 `bbooru` 生效**，其它站点这格是空的。e621 可选 `tags` / `page` / `artist` / `pool` / `pool-rev`；bbooru 可选 `auto` / `api` / `html` / `artist` |
+| **目标/标签** | 位置参数 | **含义随站点变**，见下面那张表 |
+| **标签(--tags)** | `--tags` | 标签搜索，多个标签用空格隔开，如 `cute fox` |
+| **输出目录** | `-o` | 图片存到哪。留空 = 当前目录 |
+| **数量限制** | `--limit` | 下多少张。填 `inf` = 全部；**留空 = 脚本默认 120 张，不是全部** |
+| **代理** | `--proxy` | 留空 = 自动探测；`off` = 直连；也可填 `http://127.0.0.1:7897` |
+| **页码(--page)** | `--page` | 只下某一页。对 e621 的 `page` 模式、bbooru、hypnohub、rule34us 有效。**留空 = 翻全部页** |
+| **artist 跳过非池帖** | `--skip-others` | **e621 / bbooru** 的 artist 模式：不属于任何池子的帖子不下载 |
+| **全量查池** | `--force-pool-check` | 仅 bbooru 的 artist 模式：默认只探测前 10 个帖子，勾上则全部查一遍 |
+| **pool 反转编号** | `--pool-rev` | 仅 bbooru 池子下载：文件编号倒序 |
+| **重新下载(--force)** | `--force` | 已经存在的图也重新下一遍（修复下到一半的坏文件）。对 bbooru / hypnohub / rule34us / e-hentai 生效 |
+| **挑序号(--pick)** | `--pick` | **e-hentai / e621 artist**：只下名单里的第几项，如 `2-4,7` |
+| **每画廊限张(--pages)** | `--pages` | 仅 e-hentai：每个画廊只取前 N 张 |
+| **只列名单(--dry-run)** | `--dry-run` | **e-hentai / e621 artist / bbooru / hypnohub / rule34us**：只列出会下哪些，不真下 |
+
+> 中文速览（同一张表，逐条）：
+>
+> - **站点**：选站。`e926` 会被禁用（Cloudflare 拦截），想下安全版请用 `e621` 或浏览器。
+> - **模式**：只有 e621 / bbooru 有；e621 = 标签/分页/艺术家/池/池反转，bbooru = 自动/API/HTML/艺术家。
+> - **目标/标签** 与 **标签(--tags)**：两格的分工随站点变，见下一张表 —— **这是最常填错的地方**。
+> - **输出目录**：留空就下到当前目录，建议每次都点「浏览...」指定一个。
+> - **数量限制**：`inf` = 全部；**留空不是"不限"，是脚本默认的 120 张**。
+> - **代理**：留空让它自动探测；本机 Clash 在跑、又提示连不上时，可以显式填 `http://127.0.0.1:7897`。
+> - **页码**：留空 = 翻全部页；填了才只下那一页。
+> - **artist 跳过非池帖**：`e621` 和 `bbooru` 的 artist 模式都能用 —— 不下不属于任何池子的帖子。
+> - **全量查池 / pool 反转编号**：这两格只有 bbooru 用；e621 侧对应的是「模式」下拉里的 `pool-rev`。
+> - **重新下载 / 挑序号 / 每画廊限张 / 只列名单**：按括号里写的站点生效，用不到就留空、不勾。
+
+**「目标/标签」这一格到底填什么，取决于站点：**
+
+| Site | What goes in 目标/标签 |
+|---|---|
+| `e621` / `e926` | 模式选 `pool` / `pool-rev` 时填池子 URL（如 `https://e621.net/pools/123`）；其它模式不用填，改用**标签**格 |
+| `yiff` | 标签 |
+| `ehentai` | 画廊 URL；**标签搜索**请用**标签**格 |
+| `fa` | 作品 URL |
+| `bbooru` | 池子 URL 或纯数字 id（如 `33976`）。填了这里就**不要**再填**标签**格 |
+| `wilddream` | 画廊 URL |
+| `hypnohub` / `rule34us` | 不用填，标签一律写在**标签**格 |
+
+> 一句话记法：**能"按标签找"的站（hypnohub / rule34us / bbooru 标签模式）用「标签」格；
+> 需要"直接指一个具体东西"的（画廊 URL、作品 URL、池子）用「目标/标签」格。**
+> bbooru 是个例外 —— 它两种都能做，靠"哪个格子有内容"来区分：标签格有内容 = 按标签下；
+> 标签格空着、目标格有内容 = 当池子下。
+
+### Scenario 1 — 按标签批量下载（以 rule34.us 为代表）
+
+The most common job: "give me everything tagged X, on this site".
+
+1. **站点** → `rule34us`
+2. **标签(--tags)** → your tags, space-separated, e.g. `landscape` or `cute dog`
+3. **数量限制** → e.g. `50`, or `inf` for everything
+4. **页码** → leave empty (that means "all pages")
+5. **输出目录** → click 浏览... and pick a folder
+6. Press **▶ 开始**
+
+HypnoHub works exactly the same way — just switch **站点** to `hypnohub`.
+
+> 这是最常用的场景：「把这个站上带某标签的图都给我」。
+>
+> 1. **站点** 选 `rule34us`
+> 2. **标签(--tags)** 填标签，多个用空格隔开，例如 `landscape` 或 `cute dog`
+> 3. **数量限制** 填 `50`（或者 `inf` 表示全部）
+> 4. **页码** 留空（留空就是翻全部页）
+> 5. **输出目录** 点「浏览...」选一个文件夹
+> 6. 点 **▶ 开始**
+>
+> **HypnoHub 的操作完全相同**，只是把「站点」换成 `hypnohub`。
+> 这两个站都走 HTML 页面、都用「标签」格，是"标签下载"最典型的样子。
+
+### Scenario 2 — BBooru 艺术家下载（artist 模式）
+
+Answers "which pools does this artist's tag show up in, and what else is inside those pools".
+The engine groups results **by pool**, each pool landing in its own folder; posts that belong to
+no pool go to `others/`.
+
+1. **站点** → `bbooru`
+2. **模式** → `artist`
+3. **标签(--tags)** → the artist tag
+4. Optional: tick **artist 跳过非池帖** to drop `others/` entirely
+5. Optional: tick **全量查池** if you suspect pools only appear further down the list
+   (by default only the first 10 posts are probed, and the scan stops early when nothing is found)
+6. **输出目录** → pick a folder, then **▶ 开始**
+
+> 它回答的是「这个艺术家的标签出现在哪些池子里，那些池子里还有些什么」。下载结果**按池子分文件夹**，
+> 不属于任何池子的帖子进 `others/`。
+>
+> 1. **站点** 选 `bbooru`
+> 2. **模式** 选 `artist`
+> 3. **标签(--tags)** 填艺术家标签 —— 注意艺术家名填在**标签格**，不是「目标/标签」格
+> 4. 可选：勾 **artist 跳过非池帖**，就不要 `others/` 那个文件夹了
+> 5. 可选：勾 **全量查池**。默认只探测前 10 个帖子，一旦没发现池子就提前收工；
+>    你要是知道池子出现在列表靠后的位置，就勾上让它全查一遍
+> 6. **输出目录** 选个文件夹，点 **▶ 开始**
+>
+> 原理细节见下面「BBooru artist mode」一节。
+
+**e621 has the same artist mode.** Switch **站点** to `e621`, set **模式** to `artist`, and put the
+artist tag in **标签(--tags)** as usual. Results are still grouped by pool, non-pool posts still go to
+`others/`, and **artist 跳过非池帖** works here too. e621 adds one extra step: tick
+**只列名单(--dry-run)** to see the list first, then use **挑序号(--pick 2-4,7)** to download only the
+entries you want — one entry is one pool (or `others/`), numbered exactly as `--dry-run` prints it.
+
+> **e621 也有 artist 模式，规则跟 bbooru 一样。** 把「站点」换成 `e621`、「模式」选 `artist`，
+> 艺术家标签照旧填在「标签(--tags)」格 —— 同样是按池子分文件夹、非池作品进 `others/`，
+> **「artist 跳过非池帖」照样有效**。
+> e621 侧还多一档：先勾「只列名单(--dry-run)」看一遍，再在「挑序号(--pick)」里填 `2-4,7` 挑着下。
+> 名单的一项 = 一个池子（或 `others/`），序号就是 `--dry-run` 打印出来的那个 `#`。
+> 注意 e621 的「全量查池」「pool 反转编号」两个勾选框**不生效** —— 前者是 bbooru 专属，
+> 后者在 e621 要靠「模式」下拉里的 `pool-rev`。
+
+### Scenario 3 — BBooru 池子下载（pool 模式）
+
+Download one specific collection, in order.
+
+1. **站点** → `bbooru`
+2. **目标/标签** → the pool's **show-page URL**, or just its numeric id
+   (either `https://bbooru.com/index.php?page=pool&s=show&id=33976` or `33976`)
+3. **标签(--tags)** → **leave empty** (this is what tells the GUI you mean a pool)
+4. Optional: tick **pool 反转编号** to number the files in reverse order
+5. **输出目录** → pick a folder, then **▶ 开始**
+
+> 下载某个指定合集，按顺序编好号。
+>
+> 1. **站点** 选 `bbooru`
+> 2. **目标/标签** 填池子的 **show 页 URL**，或者只填那串数字 id
+>    （`https://bbooru.com/index.php?page=pool&s=show&id=33976` 和 `33976` 都行）
+> 3. **标签(--tags)** **留空** —— 正是"标签格空着、目标格有内容"这一点，让 GUI 知道你要下的是池子
+> 4. 可选：勾 **pool 反转编号**，文件编号就倒过来
+> 5. **输出目录** 选个文件夹，点 **▶ 开始**
+>
+> 普通标签下载（不分组、不下池子）也很简单：**模式** 留 `auto`，「标签」格填标签即可 ——
+> `auto` 表示优先用 JSON API，失败自动回退 HTML。
+
 ## 📦 Sites / 支持的站点
 
 | Site | Scripts | Notes |
