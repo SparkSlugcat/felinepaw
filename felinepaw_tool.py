@@ -42,7 +42,7 @@ E621_SCRIPTS = {
 WHITELIST = {
     "e6_scraper.py": ["-o", "--limit"],
     "e6_taged_page_scraper.py": ["-o"],
-    "e6_artist.py": ["-o"],
+    "e6_artist.py": ["-o", "--dry-run", "--pick", "--manifest", "--from-manifest"],
     "pool_scraper.py": ["-o"],
     "e621.py": ["-o"],
     "yiff_scraper.py": ["-o", "--limit", "--proxy"],
@@ -72,13 +72,20 @@ def build_command(site: str, args) -> list:
             raise ValueError(f"{site} 需要 --mode: tags/page/artist/pool/pool-rev")
         script = E621_SCRIPTS[args.mode]
         if args.mode in ("tags", "page", "artist"):
-            if not args.tags:
-                raise ValueError("该模式需要 --tags")
-            pos_args += ["--tags", args.tags]
-            if args.mode == "page" and args.page:
-                pos_args += ["--page", str(args.page)]
-            if args.mode == "artist" and args.skip_others:
-                pos_args += ["--skip-others"]
+            if args.mode == "artist":
+                # 艺术家模式支持 --from-manifest（从名单挑着下），此时可不给 --tags
+                if not (args.tags or args.from_manifest):
+                    raise ValueError("艺术家模式需要 --tags <标签> 或 --from-manifest <名单>")
+                if args.tags:
+                    pos_args += ["--tags", args.tags]
+                if args.skip_others:
+                    pos_args += ["--skip-others"]
+            else:
+                if not args.tags:
+                    raise ValueError("该模式需要 --tags")
+                pos_args += ["--tags", args.tags]
+                if args.mode == "page" and args.page:
+                    pos_args += ["--page", str(args.page)]
         else:
             if not args.target:
                 raise ValueError("该模式需要 Pool URL，例如: e621 pool https://e621.net/pools/123")
