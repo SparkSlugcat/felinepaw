@@ -11,7 +11,7 @@ e-hentai 画廊下载器 v3
     python EH_scraper_v2.py "https://e-hentai.org/g/3817181/3b0370c5a1/"
 
     # ② 标签搜索 + 只看名单（不下载）
-    python EH_scraper_v2.py --tags "language:chinese$ female:anal" --limit 30 --dry-run
+    python EH_scraper_v2.py --tags "language:chinese$ female:feline" --limit 30 --dry-run
 
     # ③ 挑着下：借的 30 个里只要第 2,3,4,7 个
     python EH_scraper_v2.py --tags "language:chinese$" --limit 30 --pick 2-4,7
@@ -109,9 +109,9 @@ def search_url(query: str) -> str:
 
     e-hentai 的搜索语法（原样写进 --tags 即可，空格分隔多个标签）：
         language:chinese$      精确标签（$ = 完全匹配）
-        female:anal            普通标签
-        -male:anal             排除某标签
-        ~anal                  模糊匹配
+        female:feline            普通标签
+        -male:feline             排除某标签
+        ~feline                  模糊匹配
     这里用 quote_plus：空格 -> '+'，':' -> '%3A'，'$' -> '%24'（实测均有效）。
     """
     return "%s/?f_search=%s" % (SITE, quote_plus(str(query).strip()))
@@ -137,9 +137,9 @@ def query_dir_name(query: str) -> str:
 
     所以这里先剔掉语法符号，再把空白折成下划线（标签之间通常用空格分隔）：
 
-        'language:chinese$ female:anal'  ->  eh_language_chinese_female_anal
+        'language:chinese$ female:feline'  ->  eh_language_chinese_female_feline
 
-    注意 `-male:anal`（排除某标签）里的 `-` 保留：它是标签名的一部分，
+    注意 `-male:feline`（排除某标签）里的 `-` 保留：它是标签名的一部分，
     去掉反而会让目录名表达相反的意思。
     """
     s = re.sub(r"[~$]", "", str(query))
@@ -430,7 +430,7 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""示例:
   %(prog)s "https://e-hentai.org/g/3817181/3b0370c5a1/"
-  %(prog)s --tags "language:chinese$ female:anal" --limit 30 --dry-run
+  %(prog)s --tags "language:chinese$ female:feline" --limit 30 --dry-run
   %(prog)s --tags "language:chinese$" --limit 30 --pick 2-4,7
   %(prog)s --from-manifest eh_manifest.json --pick 2-4,7
 
@@ -441,8 +441,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("url", nargs="?", default=None,
                    help="画廊 URL，例如 https://e-hentai.org/g/3817181/3b0370c5a1/")
     p.add_argument("-t", "--tags", default=None,
-                   help="标签搜索（与 URL 二选一）。语法: language:chinese$ / female:anal / "
-                        "-male:anal / ~anal，空格分隔多个")
+                   help="标签搜索（与 URL 二选一）。语法: language:chinese$ / female:feline / "
+                        "-male:feline / ~feline，空格分隔多个")
 
     p.add_argument("-o", "--output", default=None,
                    help="保存目录（搜索模式: 根目录; 单画廊: 该画廊目录）")
