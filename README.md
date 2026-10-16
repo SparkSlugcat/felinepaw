@@ -476,6 +476,23 @@ coding assistant **WorkBuddy** — every finding was reproduced and manually rev
 
 > 💡 一句话：**想要命令行** → 用本仓库的 `sites/e621/`；**想要鼠标点** → 用 e621-downloader。
 
+### 🖼 [e-hentai-paw](https://github.com/SparkSlugcat/e-hentai-paw) — e-hentai 专用版
+
+For e-hentai galleries specifically: tag search, a **scan-then-pick** workflow (list the results,
+tick the ones you want, then download), and **both a CLI and a GUI** in one folder.
+
+[![Stars](https://img.shields.io/github/stars/SparkSlugcat/e-hentai-paw?style=for-the-badge&color=yellow)](https://github.com/SparkSlugcat/e-hentai-paw/stargazers)
+
+- **CLI + GUI in one folder** — double-click `e-hentai启动.bat` or `启动GUI.bat`, or call the script directly
+- **Scan first, then pick** — `--dry-run` lists the galleries, `--pick 2-4,7` downloads only those
+- **Self-contained** — ships its own copy of `common.py`, so the folder can be copied and used on its own
+
+> - **同一个文件夹里既有命令行也有图形界面** —— 双击 `e-hentai启动.bat` 或 `启动GUI.bat`
+> - **先看名单再挑着下** —— `--dry-run` 列出画廊，`--pick 2-4,7` 只下选中的那几个
+> - **自包含** —— 自带一份 `common.py`，整个文件夹拷走就能独立使用
+
+> 💡 一句话：**只下 e-hentai** → 用 e-hentai-paw；**要一个入口调所有站点** → 就是本仓库。
+
 ---
 
 ## 📁 Layout / 结构

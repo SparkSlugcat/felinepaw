@@ -775,6 +775,10 @@ def _run_gallery(args, session, pacing):
         filecount = meta.get("filecount")
         print("画廊标题: %s | 文件数: %s | 分类: %s"
               % (title, filecount, meta.get("category")))
+        # 把画廊的完整标签也打出来（gdata API 返回的是全量标签，非搜索页那几条）
+        tags = meta.get("tags") or []
+        if tags:
+            print("标签: %s" % ", ".join(str(t) for t in tags))
     else:
         print("gdata API 未返回信息，回退用 URL 命名目录。")
         title = f"gallery_{gid}"
