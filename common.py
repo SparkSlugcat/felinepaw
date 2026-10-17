@@ -561,3 +561,30 @@ def run_preflight(args, probe_url: Optional[str] = None,
         print("  (--no-preflight skips this check)")
         return False
     return True
+
+
+# ============================================================
+# 本机输出根目录：.pawout 私有配置
+# ============================================================
+
+PAWOUT_NAME = ".pawout"
+
+
+def local_out_root(default: Optional[str] = None) -> Path:
+    """下载输出的根目录。优先级：环境变量 `PAW_OUT_DIR` > 项目根 `.pawout` > `default`。
+
+    `.pawout` 是**本机私有配置**（已进 `.gitignore`），内容 = 一行目录路径，`#` 开头为注释。
+    作用：让"默认下载到哪儿"与代码解耦 —— 仓库里不出现任何本机绝对路径。
+    """
+    env = os.environ.get("PAW_OUT_DIR", "").strip()
+    if env:
+        return Path(env).expanduser()
+    cfg = Path(__file__).resolve().parent / PAWOUT_NAME
+    try:
+        for line in cfg.read_text(encoding="utf-8-sig").splitlines():
+            s = line.strip()
+            if s and not s.startswith("#"):
+                return Path(s).expanduser()
+    except OSError:
+        pass
+    return Path(default) if default else Path(".")

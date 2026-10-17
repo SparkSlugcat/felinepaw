@@ -20,6 +20,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import common  # noqa: E402  （读本机默认输出目录 .pawout）
 import felinepaw_tool as tool
 
 SITES = ["e621", "e926", "yiff", "ehentai", "fa", "bbooru", "wilddream", "hypnohub", "rule34us"]
@@ -66,7 +67,7 @@ class FelinepawGUI:
                                                                   sticky="we", pady=6)
 
         ttk.Label(bar, text="输出目录:").grid(row=3, column=0, padx=(8, 2), pady=6, sticky="e")
-        self.out_var = tk.StringVar()
+        self.out_var = tk.StringVar(value=str(common.local_out_root()))
         ttk.Entry(bar, textvariable=self.out_var, width=32).grid(row=3, column=1, columnspan=2,
                                                                  sticky="we", pady=6)
         ttk.Button(bar, text="浏览...", command=self._pick_dir).grid(row=3, column=3, padx=4)

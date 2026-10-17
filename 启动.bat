@@ -17,14 +17,7 @@ rem  自动定位 py39 环境（requests / lxml / bs4 等依赖都装在那儿），
 rem  不依赖 PATH 里排第一的 python：本机 PATH 里第一个 python 是
 rem  3.13，没装本项目要的库，用它起不来。定位顺序见下面那段。
 rem
-rem  参数 silent：连"出错要按任意键"都免掉。只有
-rem  「启动(无窗口).vbs」会传它 —— 那个 .vbs 把本文件跑在一个
-rem  **隐藏**的 cmd 里，里头的 pause 会永远挂着、表现成"双击了但
-rem  什么都没发生"，是最难查的那种失败。日常双击本文件不用传参。
-rem
-rem  ★ 想双击时连命令行窗口都不闪 → 双击「启动(无窗口).vbs」。
-rem    .bat 这一步必须由 cmd.exe 解析，窗口一定会闪一下；想零窗口，
-rem    入口就不能是 .bat。
+rem  参数 silent：连"出错要按任意键"都免了（保留兼容，日常可不传）。
 rem
 rem  只想用命令行（不开界面）：在本目录开个终端，敲
 rem      python felinepaw_tool.py --help
@@ -46,6 +39,22 @@ if not defined PY if exist "%USERPROFILE%\miniconda3\envs\py39\python.exe" set "
 if not defined PY if exist "%USERPROFILE%\anaconda3\envs\py39\python.exe" set "PY=%USERPROFILE%\anaconda3\envs\py39\python.exe"
 if not defined PY if exist "%LOCALAPPDATA%\miniconda3\envs\py39\python.exe" set "PY=%LOCALAPPDATA%\miniconda3\envs\py39\python.exe"
 if not defined PY if exist "%LOCALAPPDATA%\Continuum\anaconda3\envs\py39\python.exe" set "PY=%LOCALAPPDATA%\Continuum\anaconda3\envs\py39\python.exe"
+if not defined PY if exist "%USERPROFILE%\miniconda3\envs\py310\python.exe" set "PY=%USERPROFILE%\miniconda3\envs\py310\python.exe"
+if not defined PY if exist "%USERPROFILE%\anaconda3\envs\py310\python.exe" set "PY=%USERPROFILE%\anaconda3\envs\py310\python.exe"
+if not defined PY if exist "%LOCALAPPDATA%\miniconda3\envs\py310\python.exe" set "PY=%LOCALAPPDATA%\miniconda3\envs\py310\python.exe"
+if not defined PY if exist "%LOCALAPPDATA%\Continuum\anaconda3\envs\py310\python.exe" set "PY=%LOCALAPPDATA%\Continuum\anaconda3\envs\py310\python.exe"
+if not defined PY if exist "%USERPROFILE%\miniconda3\envs\py311\python.exe" set "PY=%USERPROFILE%\miniconda3\envs\py311\python.exe"
+if not defined PY if exist "%USERPROFILE%\anaconda3\envs\py311\python.exe" set "PY=%USERPROFILE%\anaconda3\envs\py311\python.exe"
+if not defined PY if exist "%LOCALAPPDATA%\miniconda3\envs\py311\python.exe" set "PY=%LOCALAPPDATA%\miniconda3\envs\py311\python.exe"
+if not defined PY if exist "%LOCALAPPDATA%\Continuum\anaconda3\envs\py311\python.exe" set "PY=%LOCALAPPDATA%\Continuum\anaconda3\envs\py311\python.exe"
+if not defined PY if exist "%USERPROFILE%\miniconda3\envs\py312\python.exe" set "PY=%USERPROFILE%\miniconda3\envs\py312\python.exe"
+if not defined PY if exist "%USERPROFILE%\anaconda3\envs\py312\python.exe" set "PY=%USERPROFILE%\anaconda3\envs\py312\python.exe"
+if not defined PY if exist "%LOCALAPPDATA%\miniconda3\envs\py312\python.exe" set "PY=%LOCALAPPDATA%\miniconda3\envs\py312\python.exe"
+if not defined PY if exist "%LOCALAPPDATA%\Continuum\anaconda3\envs\py312\python.exe" set "PY=%LOCALAPPDATA%\Continuum\anaconda3\envs\py312\python.exe"
+if not defined PY if exist "%USERPROFILE%\miniconda3\envs\py313\python.exe" set "PY=%USERPROFILE%\miniconda3\envs\py313\python.exe"
+if not defined PY if exist "%USERPROFILE%\anaconda3\envs\py313\python.exe" set "PY=%USERPROFILE%\anaconda3\envs\py313\python.exe"
+if not defined PY if exist "%LOCALAPPDATA%\miniconda3\envs\py313\python.exe" set "PY=%LOCALAPPDATA%\miniconda3\envs\py313\python.exe"
+if not defined PY if exist "%LOCALAPPDATA%\Continuum\anaconda3\envs\py313\python.exe" set "PY=%LOCALAPPDATA%\Continuum\anaconda3\envs\py313\python.exe"
 if not defined PY if defined CONDA_PREFIX if exist "%CONDA_PREFIX%\python.exe" set "PY=%CONDA_PREFIX%\python.exe"
 if not defined PY for /f "delims=" %%I in ('where python 2^>nul') do if not defined PY set "PY=%%I"
 if defined PY for %%I in ("%PY%") do set "PYDIR=%%~dpI"
@@ -76,8 +85,10 @@ echo.
 echo 没有找到可用的 Python 环境（需要 requests / lxml / bs4 等依赖）。
 echo.
 echo 两种指定办法（任选其一）：
-echo   1) 在命令行先 set PYTHON_EXE=你的\python.exe 再跑本文件
-echo   2) 建一个名为 py39 的 conda 环境，脚本会自动找到它
+echo   1) 把任意 python.exe 的完整路径配给 PYTHON_EXE 环境变量（永久）
+echo     命令: setx PYTHON_EXE "C:\你的\python.exe"
+echo     注意: setx 写注册表,新开 cmd 才生效;先用 set 试一次也行
+echo   2) 建一个名为 py39~py313 的 conda 环境（任选其一），脚本会自动找到它
 echo.
 if not defined SILENT pause
 exit /b 1

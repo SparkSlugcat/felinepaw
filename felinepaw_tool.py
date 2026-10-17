@@ -30,6 +30,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 
+# 借同级的 common.py 读本机默认输出目录（.pawout）
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
+import common  # noqa: E402
+
 # 站点 -> (默认脚本, 支持的通用参数, 需要的位置参数帮助)
 E621_SCRIPTS = {
     "tags":     "e6_scraper.py",
@@ -194,7 +199,7 @@ def build_command(site: str, args) -> list:
                     cmd.extend([flag, str(value)])
             else:
                 print(f"⚠️ 警告: 目标脚本 {script} 不支持 {flag}，该参数已忽略", file=sys.stderr)
-    _add("-o", args.output)
+    _add("-o", args.output or str(common.local_out_root()))
     _add("--limit", args.limit)
     _add("--proxy", args.proxy)
     if site not in ("bbooru", "wilddream", "hypnohub", "rule34us"):   # 这些站的 -w 已在上面映射为 --threads
