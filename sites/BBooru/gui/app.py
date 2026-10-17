@@ -76,12 +76,159 @@ MODES = {
 ENGINES = ["auto", "api", "html"]
 
 
+class PickDialog(tk.Toplevel):
+    """「挑着下载」弹窗：Treeview + 勾选 + 全选/反选 + 下载选中。
+
+    与 pixivpaw 的清单弹窗同一套交互（spark 已经用熟）：
+    - 勾选状态存在 set 里，不塞进 Treeview（重建控件不丢勾）
+    - 点任意一列都能切勾选（`<Button-1>` + `identify_row`，不依赖 selectmode）
+    - 默认全选（最常见是「我全要」）
+    - 确认时回调 on_pick([1-based 序号...])，序号直接喂 `--pick`
+    - 关闭（确认或取消）都调 on_done，让父窗口恢复按钮状态
+    """
+
+    COLS = [
+        ("check",  "勾",   4,  "center"),
+        ("no",     "#",    6,  "e"),
+        ("id",     "ID",   12, "w"),
+        ("folder", "目录",  18, "w"),
+        ("url",    "地址",  64, "w"),
+    ]
+    _ASCII_W = 8
+
+    def __init__(self, parent, items, on_pick, on_done=None):
+        super().__init__(parent)
+        self.items = items
+        self.on_pick = on_pick
+        self.on_done = on_done
+        self.checked = set()          # 0-based 列表下标
+        self.title("挑着下载 — 勾选要下载的条目（共 %d 项）" % len(items))
+        self.geometry("980x620")
+        self.transient(parent)
+        self._build()
+        self.checked = set(range(len(items)))     # 默认全选
+        self._fill()
+        self.grab_set()
+        self.protocol("WM_DELETE_WINDOW", self._cancel)
+
+    # ---------------- 界面 ----------------
+    def _build(self):
+        top = ttk.Frame(self)
+        top.pack(fill="x", padx=10, pady=(10, 4))
+        ttk.Label(top, text="把要下载的条目前面勾上，点「下载选中」即可。"
+                           "序号与命令行 --pick 一致。").pack(side="left")
+
+        mid = ttk.Frame(self)
+        mid.pack(fill="both", expand=True, padx=10, pady=4)
+        cols = [c[0] for c in self.COLS]
+        self.tree = ttk.Treeview(mid, columns=cols, show="headings", height=18)
+        for cid, header, w, anchor in self.COLS:
+            self.tree.heading(cid, text=header)
+            self.tree.column(cid, width=w * self._ASCII_W, anchor=anchor,
+                             stretch=(cid == "url"))
+        self.tree.tag_configure("on", background="#e8f5e9")
+        self.tree.tag_configure("off", foreground="#999")
+        sb = ttk.Scrollbar(mid, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=sb.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+        self.tree.bind("<Button-1>", self._on_click_row)
+
+        ops = ttk.Frame(self)
+        ops.pack(fill="x", padx=10, pady=4)
+        ttk.Button(ops, text="全选", command=lambda: self._set_all(True)).pack(side="left")
+        ttk.Button(ops, text="取消全选", command=lambda: self._set_all(False)).pack(side="left", padx=(6, 0))
+        ttk.Button(ops, text="反选", command=self._invert).pack(side="left", padx=(6, 0))
+        self.count_lbl = ttk.Label(ops, text="", foreground="gray")
+        self.count_lbl.pack(side="left", padx=12)
+
+        bot = ttk.Frame(self)
+        bot.pack(fill="x", padx=10, pady=(4, 10))
+        ttk.Button(bot, text="取消", command=self._cancel).pack(side="right")
+        self.ok_btn = ttk.Button(bot, text="下载选中", command=self._confirm)
+        self.ok_btn.pack(side="right", padx=(0, 6))
+
+    def _row_values(self, idx, checked):
+        it = self.items[idx]
+        return (
+            "☑" if checked else "☐",
+            str(it.get("index") or (idx + 1)),
+            str(it.get("id") or ""),
+            (it.get("folder") or "—"),
+            (it.get("url") or ""),
+        )
+
+    def _fill(self):
+        rows = []
+        for i in range(len(self.items)):
+            rows.append((str(i), self._row_values(i, True), ("on",)))
+        if rows:
+            for iid, vals, tags in rows:
+                self.tree.insert("", "end", iid=iid, values=vals, tags=tags)
+        self._refresh_count()
+
+    # ---------------- 交互 ----------------
+    def _on_click_row(self, event):
+        iid = self.tree.identify_row(event.y)
+        if not iid:
+            return
+        try:
+            idx = int(iid)
+        except ValueError:
+            return
+        on = idx not in self.checked
+        if on:
+            self.checked.add(idx)
+        else:
+            self.checked.discard(idx)
+        self.tree.item(iid, values=self._row_values(idx, on),
+                       tags=("on" if on else "off",))
+        self._refresh_count()
+
+    def _set_all(self, on):
+        self.checked = set(range(len(self.items))) if on else set()
+        for i in range(len(self.items)):
+            self.tree.item(str(i), values=self._row_values(i, on),
+                           tags=("on" if on else "off",))
+        self._refresh_count()
+
+    def _invert(self):
+        new = set(range(len(self.items))) - self.checked
+        for i in range(len(self.items)):
+            on = i in new
+            self.tree.item(str(i), values=self._row_values(i, on),
+                           tags=("on" if on else "off",))
+        self.checked = new
+        self._refresh_count()
+
+    def _refresh_count(self):
+        self.count_lbl.config(text="已选 %d / %d 项" % (len(self.checked), len(self.items)))
+        self.ok_btn.config(state="normal" if self.checked else "disabled")
+
+    def _confirm(self):
+        idx_1b = sorted(self.items[i].get("index") or (i + 1) for i in self.checked)
+        picked, done = self.on_pick, self.on_done
+        self.destroy()
+        if done:
+            done()
+        if picked:
+            picked(idx_1b)
+
+    def _cancel(self):
+        done = self.on_done
+        self.destroy()
+        if done:
+            done()
+
+
+
 class BBooruGUI:
     def __init__(self, root):
         self.root = root
         root.title("BBooru 下载器")
         root.geometry("860x640")
         self.queue = queue.Queue()
+        self.evt_q = queue.Queue()      # 线程 → 主线程的事件（收集完成等）
         self.worker = None
         self._build_ui()
         self._apply_icon()
@@ -178,6 +325,8 @@ class BBooruGUI:
         act.pack(fill="x", padx=10, pady=4)
         self.start_btn = ttk.Button(act, text="▶ 开始下载", command=self._start)
         self.start_btn.pack(side="left")
+        self.pick_btn = ttk.Button(act, text="☑ 挑着下载", command=self._pick_download)
+        self.pick_btn.pack(side="left", padx=8)
         self.stop_btn = ttk.Button(act, text="■ 停止", command=self._stop, state="disabled")
         self.stop_btn.pack(side="left", padx=8)
         ttk.Button(act, text="打开输出目录", command=self._open_out).pack(side="left", padx=8)
@@ -231,6 +380,14 @@ class BBooruGUI:
                 self.log_text.configure(state="disabled")
         except queue.Empty:
             pass
+        # 线程 → 主线程事件（收集完成后弹勾选框）
+        while True:
+            try:
+                kind, payload, argv = self.evt_q.get_nowait()
+            except queue.Empty:
+                break
+            if kind == "collected":
+                self._on_collected(payload, argv)
         if self.worker is not None and not self.worker.is_alive():
             self._on_done()
         self.root.after(100, self._poll)
@@ -275,7 +432,28 @@ class BBooruGUI:
             argv += ["--dry-run"]
         return argv
 
-    def _start(self):
+    def _start(self, argv=None):
+        if self.worker is not None and self.worker.is_alive():
+            messagebox.showinfo("提示", "任务正在运行中")
+            return
+        if argv is None:
+            try:
+                argv = self._build_argv()
+            except ValueError as e:
+                messagebox.showwarning("参数错误", str(e))
+                return
+
+        self._log(">>> " + " ".join(argv))
+        self.start_btn.config(state="disabled")
+        self.pick_btn.config(state="disabled")
+        self.stop_btn.config(state="normal")
+        self.status_var.set("运行中...")
+        self.worker = threading.Thread(target=self._run_worker, args=(argv,), daemon=True)
+        self.worker.start()
+
+    # ---------------- 挑着下载 ----------------
+    def _pick_download(self):
+        """先只收集列表 → 弹勾选框 → 用 --pick 只下勾中的。"""
         if self.worker is not None and self.worker.is_alive():
             messagebox.showinfo("提示", "任务正在运行中")
             return
@@ -284,13 +462,63 @@ class BBooruGUI:
         except ValueError as e:
             messagebox.showwarning("参数错误", str(e))
             return
+        # 挑着下载的语义就是「收集完立刻挑着下」，所以去掉 --dry-run
+        if "--dry-run" in argv:
+            argv = [a for a in argv if a != "--dry-run"]
+            self._log("[挑着下载] 已忽略「仅收集(--dry-run)」勾选")
 
-        self._log(">>> " + " ".join(argv))
+        self._log(">>> 先收集名单: " + " ".join(argv))
         self.start_btn.config(state="disabled")
-        self.stop_btn.config(state="normal")
-        self.status_var.set("运行中...")
-        self.worker = threading.Thread(target=self._run_worker, args=(argv,), daemon=True)
-        self.worker.start()
+        self.pick_btn.config(state="disabled")
+        self.stop_btn.config(state="disabled")
+        self.status_var.set("正在收集名单...")
+        threading.Thread(target=self._collect_worker, args=(argv,), daemon=True).start()
+
+    def _collect_worker(self, argv):
+        writer = QueueWriter(self.queue)
+        old_out, old_err = sys.stdout, sys.stderr
+        sys.stdout = sys.stderr = writer
+        ctx = None
+        try:
+            ctx = B_scraper.collect_only(argv)
+        except SystemExit as e:
+            self._log(f"[退出码 {e.code}]")
+        except Exception:
+            self._log("[ERROR] " + traceback.format_exc())
+        finally:
+            try:
+                writer.flush()
+            except Exception:
+                pass
+            sys.stdout, sys.stderr = old_out, old_err
+        self.evt_q.put(("collected", ctx, argv))
+
+    def _on_collected(self, ctx, argv):
+        items = (ctx or {}).get("items") or []
+        if not items:
+            self._log("[收集失败或名单为空，无法挑着下]")
+            self.status_var.set("收集失败")
+            self._reset_buttons()
+            return
+        self._log("[收集到 %d 项，请在弹窗里勾选]" % len(items))
+        self.status_var.set("挑着下载：勾选后点「下载选中」")
+
+        def on_pick(idx):
+            if not idx:
+                self._log("[没勾任何项，已取消]")
+                return
+            self._log("[已选 %d 项，开始下载]" % len(idx))
+            self._start(argv + ["--pick", ",".join(str(i) for i in idx)])
+
+        PickDialog(self.root, items, on_pick=on_pick, on_done=self._reset_buttons)
+
+    def _reset_buttons(self):
+        running = self.worker is not None and self.worker.is_alive()
+        self.start_btn.config(state="disabled" if running else "normal")
+        self.pick_btn.config(state="disabled" if running else "normal")
+        self.stop_btn.config(state="normal" if running else "disabled")
+        if not running:
+            self.status_var.set("就绪")
 
     def _run_worker(self, argv):
         writer = QueueWriter(self.queue)
@@ -312,6 +540,7 @@ class BBooruGUI:
     def _on_done(self):
         self.worker = None
         self.start_btn.config(state="normal")
+        self.pick_btn.config(state="normal")
         self.stop_btn.config(state="disabled")
         self.status_var.set("完成")
         self._log("[任务结束]")
@@ -339,6 +568,11 @@ def _selftest():
                  f"cooldown={ns.cooldown} force={ns.force} no_preflight={ns.no_preflight}")
     lines.append(f"cancel API: reset={callable(B_scraper.reset_cancel)} "
                  f"request={callable(B_scraper.request_cancel)}")
+    # 挑着下载（v1.2 起）：缺任何一个都说明打包时用了旧的 B_scraper.py
+    lines.append(f"pick API: parse_pick={callable(getattr(B_scraper, 'parse_pick', None))} "
+                 f"collect_only={callable(getattr(B_scraper, 'collect_only', None))}")
+    lines.append(f"icon={resource_path(os.path.join('assets', 'icon.ico'))} "
+                 f"exists={os.path.exists(resource_path(os.path.join('assets', 'icon.ico')))}")
     out = os.path.join(tempfile.gettempdir(), "bbooru_selftest.txt")
     with open(out, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))

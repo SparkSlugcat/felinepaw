@@ -122,6 +122,64 @@ def get_extension_from_url(url, default='.jpg'):
     return ext if ext else default
 
 
+def parse_pick(spec, total):
+    """解析「挑着下」的序号表达式，返回 1-based 升序去重的序号列表；非法返回 None。
+
+        "2-4,7"     -> [2, 3, 4, 7]
+        "1,3,5"     -> [1, 3, 5]
+        "3-"        -> [3, 4, ..., total]   （省略终点 = 到末尾）
+        "-3"        -> [1, 2, 3]            （省略起点 = 从头）
+        "all" / "*" -> [1, 2, ..., total]
+
+    序号就是 --dry-run（或 GUI「挑着下载」列表）里打印的那个序号。
+    越界序号只忽略、不报错（搜索结果总数会变），但会打印一行提示，
+    避免用户以为「我明明写了却没下」。
+    """
+    s = str(spec or "").strip().lower()
+    if s in ("all", "*"):
+        return list(range(1, total + 1))
+    if not s:
+        print("--pick is empty. Write something like 2-4,7 (or all).")
+        return None
+
+    picked = set()
+    for part in s.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        m = re.fullmatch(r"(\d*)\s*-\s*(\d*)", part)
+        if m:
+            a, b = m.group(1), m.group(2)
+            if not a and not b:
+                print("--pick: '-' needs at least one number on either side: %r" % part)
+                return None
+            start = int(a) if a else 1
+            end = int(b) if b else total
+            if start > end:
+                print("--pick: reversed range (%s > %s): %r" % (start, end, part))
+                return None
+            picked.update(range(start, end + 1))
+        elif part.isdigit():
+            picked.add(int(part))
+        else:
+            print("--pick: cannot parse %r (supported: 2-4,7 / 3- / -3 / all)" % part)
+            return None
+
+    keep = sorted(i for i in picked if 1 <= i <= total)
+    dropped = sorted(i for i in picked if i not in keep)
+    if dropped:
+        if len(dropped) > 5:
+            print("--pick: ignored %d out-of-range indices (%d~%d; the list has %d)"
+                  % (len(dropped), dropped[0], dropped[-1], total))
+        else:
+            print("--pick: ignored out-of-range indices %s (the list has %d)"
+                  % (", ".join(str(i) for i in dropped), total))
+    if not keep:
+        print("--pick: nothing left after filtering.")
+        return None
+    return keep
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="从 bbooru.com 下载原图：--tags 按标签（JSON API 优先），或 --pool 按合集（HTML）")
@@ -146,7 +204,11 @@ def parse_args(argv=None):
     common.add_preflight_args(parser)
     parser.add_argument("--proxy", default=None,
                         help="代理: 留空=自动检测, off=直连, 或 http://127.0.0.1:7897")
-    parser.add_argument("--dry-run", action="store_true", help="只收集列表，不下载（用于测试翻页）")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="只列出收集到的条目（带序号），不下载")
+    parser.add_argument("--pick", default=None,
+                        help="只下载挑中的序号，如 2-4,7 / 3- / -3 / all；"
+                             "序号来自 --dry-run 或 GUI「挑着下载」列表")
     # v5 新增参数
     parser.add_argument("--skip-others", action="store_true",
                         help="Artist 模式：跳过不属于任何 pool 的帖子（不放入 others/ 文件夹）")
@@ -1027,47 +1089,65 @@ def download_images_with_folders(tasks_with_folders, base_dir, adult_flag,
     return ok, fail
 
 
-def main(argv=None):
-    reset_cancel()                      # 每次运行清除上次的取消标志（GUI 可重复运行）
-    args = parse_args(argv)
+def _print_dry_run(items, limit_print=200):
+    """打印带序号的收集结果。序号就是 --pick 要写的号。"""
+    total = len(items)
+    print("(--dry-run) nothing downloaded; the indices below are what --pick expects.")
+    for it in items[:limit_print]:
+        folder = it["folder"]
+        prefix = ("[%s] " % folder) if folder else ""
+        print("  %4d. %s%s" % (it["index"], prefix, it["url"]))
+    if total > limit_print:
+        print("  ... only the first %d are listed (total %d). "
+              "--pick still accepts any index up to %d."
+              % (limit_print, total, total))
+    print("  Download just a few: --pick 2-4,7  (or --pick all)")
+
+
+def _collect_all(args):
+    """参数校验 + 预检 + 收集。成功返回 ctx（dict），失败返回 None（原因已打印）。
+
+    ctx["items"] 每项：{"index": 1-based, "id": post id, "url": 原图或详情页,
+                        "task": 原始 task（下载用）, "folder": 子目录名（artist 模式才非空）}
+    """
     if args.threads < 1:
         print("--threads must be >= 1")
-        return
+        return None
 
     # ---- 参数校验 ----
     if args.page is not None and args.pool:
         print("--page is only for --tags mode, cannot be used with --pool.")
-        return
+        return None
     if args.pool_rev and not args.pool:
         print("--pool-rev is only for --pool mode.")
-        return
+        return None
     if args.mode == "artist" and not args.tags:
         print("--mode artist requires --tags.")
-        return
+        return None
     if args.mode == "artist" and args.pool:
         print("--mode artist cannot be used with --pool.")
-        return
+        return None
     if args.skip_others and args.mode != "artist":
         print("--skip-others is only for --mode artist.")
-        return
+        return None
     if args.page is not None and args.page < 1:
         print("--page must be >= 1.")
-        return
+        return None
 
     # ---- 目标校验：--tags 与 --pool 二选一 ----
     if args.tags and args.pool:
         print("--tags and --pool are mutually exclusive, please provide only one.")
-        return
+        return None
     if not args.tags and not args.pool:
         print("Need --tags <tag> or --pool <pool id/URL>. Use --help for usage.")
-        return
+        return None
     pool_mode = bool(args.pool)
     if pool_mode:
         try:
             pool_id = extract_pool_id(args.pool)
         except ValueError as e:
             print(f"Argument error: {e}")
-            return
+            return None
         folder_name = sanitize_filename(args.name if args.name else f"pool_{pool_id}")
     else:
         tags = args.tags.strip()
@@ -1089,13 +1169,13 @@ def main(argv=None):
 
     # ---- 预检（fail-fast）：Clash 没开时 1 秒说清，而不是卡几十秒再丢 ProxyError ----
     if not common.run_preflight(args, SITE_PROBE_URL, "bbooru"):
-        return
+        return None
     pacing = common.make_pacing(args)
 
     # --limit 家族语义：默认 120 / inf / 数字
     limit = parse_limit(args.limit, 10 ** 9)
     if limit is None:
-        return
+        return None
 
     target = f"pool {pool_id}" if pool_mode else f"tags {tags}"
     mode_str = "pool" if pool_mode else args.mode
@@ -1115,7 +1195,7 @@ def main(argv=None):
         # pool 走 HTML show 页（dapi 不支持 pool 过滤）
         tasks = pool_collect_tasks(pool_id, limit, adult_flag, _p, pool_rev=args.pool_rev)
     elif args.mode == "artist":
-        # Artist 模式
+        # Artist 模式：每个帖子带自己的子目录
         print("Artist mode starting ...")
         atf = artist_collect_tasks(
             tags, limit, adult_flag, args.threads, _p,
@@ -1123,20 +1203,17 @@ def main(argv=None):
             force_pool_check=args.force_pool_check)
         if not atf:
             print("No Artist tasks collected, exiting.")
-            return
+            return None
         print(f"Artist mode collected {len(atf)} tasks.")
-        if args.dry_run:
-            print("(--dry-run, showing first 5 only)")
-            for t, fld in atf[:5]:
-                if t["dl"]:
-                    print(f"  [{fld}] {t['id']}  {t['dl']}")
-                else:
-                    print(f"  [{fld}] {t['id']}  {t['page']}")
-            return
-        download_images_with_folders(
-            atf, download_dir, adult_flag, args.threads, args.retry, _p,
-            pacing=pacing, force=args.force)
-        return
+        items = [{"index": i,
+                  "id": t["id"],
+                  "url": t["dl"] if t["dl"] else t["page"],
+                  "task": t,
+                  "folder": fld}
+                 for i, (t, fld) in enumerate(atf, 1)]
+        return {"items": items, "folder": folder_name, "download_dir": download_dir,
+                "proxy": _p, "pacing": pacing, "adult": adult_flag, "mode_str": "artist"}
+
     else:
         # ---- tags 收集（auto: API 失败自动回退 HTML）----
         tasks = None
@@ -1148,7 +1225,7 @@ def main(argv=None):
                 print(f"[WARN] API mode unavailable: {e}")
                 if args.mode == "api":
                     print("--mode api failed, use --mode html or default auto (auto-fallback) instead.")
-                    return
+                    return None
                 print("auto mode: fallback to HTML mode ...")
                 args.mode = "html"
             except Exception as e:
@@ -1160,26 +1237,66 @@ def main(argv=None):
             # --page 只在 API 模式下生效，回退到 HTML 时不支持 --page
             if args.page is not None and args.mode == "html" and tasks is None:
                 print("--page only works in API mode, not supported in HTML fallback.")
-                return
+                return None
         if tasks is None:
             tasks = html_collect_tasks(tags, limit, adult_flag, args.threads, _p)
 
     if not tasks:
         print("No tasks collected, exiting.")
-        return
+        return None
 
     print(f"Collected {len(tasks)} tasks ({mode_str} mode).")
-    if args.dry_run:
-        print("(--dry-run, showing first 5 only)")
-        for t in tasks[:5]:
-            if t["dl"]:
-                print(f"  {t['id']}  {t['dl']}")
-            else:
-                print(f"  {t['id']}  {t['page']}")
+    items = [{"index": i,
+              "id": t["id"],
+              "url": t["dl"] if t["dl"] else t["page"],
+              "task": t,
+              "folder": ""}
+             for i, t in enumerate(tasks, 1)]
+    return {"items": items, "folder": folder_name, "download_dir": download_dir,
+            "proxy": _p, "pacing": pacing, "adult": adult_flag, "mode_str": mode_str}
+
+
+def collect_only(argv=None):
+    """GUI 用：只收集不下载，返回 _collect_all 的 ctx（失败 None）。--pick 在收集阶段忽略。"""
+    args = parse_args(argv)
+    args.dry_run = True
+    args.pick = None
+    return _collect_all(args)
+
+
+def main(argv=None):
+    reset_cancel()                      # 每次运行清除上次的取消标志（GUI 可重复运行）
+    args = parse_args(argv)
+    ctx = _collect_all(args)
+    if ctx is None:
         return
 
-    download_images(tasks, download_dir, adult_flag, args.threads, args.retry, _p,
-                    pacing=pacing, force=args.force)
+    items = ctx["items"]
+    if args.dry_run:
+        _print_dry_run(items)
+        return
+
+    if args.pick:
+        picked = parse_pick(args.pick, len(items))
+        if picked is None:
+            return
+        print("--pick: keeping %d of %d." % (len(picked), len(items)))
+        items = [items[i - 1] for i in picked]
+
+    if not items:
+        print("Nothing left to download, exiting.")
+        return
+
+    if ctx["mode_str"] == "artist":
+        download_images_with_folders(
+            [(it["task"], it["folder"]) for it in items],
+            ctx["download_dir"], ctx["adult"], args.threads, args.retry, ctx["proxy"],
+            pacing=ctx["pacing"], force=args.force)
+    else:
+        download_images(
+            [it["task"] for it in items],
+            ctx["download_dir"], ctx["adult"], args.threads, args.retry, ctx["proxy"],
+            pacing=ctx["pacing"], force=args.force)
 
 
 if __name__ == "__main__":
