@@ -17,10 +17,169 @@ A unified launcher ([`felinepaw_tool.py`](felinepaw_tool.py), CLI + tkinter GUI)
 >
 > 如果这个项目对你有帮助，欢迎点个 ⭐ Star，非常感谢！
 
-> 🖥 **Prefer a window over the terminal? / 不想敲命令行？**
-> Try **[e621-downloader](https://github.com/SparkSlugcat/e621-downloader)** — a standalone GUI for
-> e621 with a **no-install `.exe`**, bilingual UI and tag / page / artist modes.
-> / 试试同系列的 **e621 图形界面版**：免装 Python，下载 exe 双击即用。
+---
+
+## ⚙️ Requirements / 环境要求
+
+| Item / 项 | Notes / 说明 |
+|---|---|
+| Python | **3.9 or newer** (3.9 / 3.10 / 3.11 / 3.12 all tested). Version management: [Miniconda](https://docs.conda.io/en/latest/miniconda.html) / [pyenv](https://github.com/pyenv/pyenv) recommended; the official installer works too |
+| 3rd-party | `requests` (`pip install requests`); **`lxml`** is also required for e-hentai / FA / WildDream; **`DrissionPage`** is **optional** — only needed for the yiff-auto browser variant and the FA-cookies helper |
+| OS | **Windows 10 / 11** (the `.bat` launcher is Windows-only); other OSes should work in theory (no Windows-only code) but are untested |
+| Network | A working local proxy (Clash / mihomo on `http://127.0.0.1:7897` by default) — most of these sites are not directly reachable from mainland China |
+
+> **Quickest start / 最省事的起步**:
+>
+> ```bash
+> conda create -n felinepaw python=3.9 -y
+> conda activate felinepaw
+> pip install requests
+> # 按需：pip install lxml          # 给 e-hentai / FA / WildDream
+> # 按需：pip install DrissionPage  # 给 yiff-auto / FA cookies
+> ```
+
+---
+
+## 🌐 Proxy port / 代理端口
+
+> 90% of users can skip this section. This is for those whose local proxy is not on the default `127.0.0.1:7897`.
+
+The tool defaults to `http://127.0.0.1:7897` (Clash / Clash Verge / mihomo mixed port).
+If you changed the port (or use SS / V2RayN / NekoBox / another local proxy), change it via:
+
+**Option 1: environment variables (recommended, persistent)**
+
+```bat
+:: Windows cmd — permanent, takes effect after reopening cmd
+setx HTTP_PROXY "http://127.0.0.1:YOUR_PORT"
+setx HTTPS_PROXY "http://127.0.0.1:YOUR_PORT"
+```
+
+**Option 2: command-line flag (one-off)**
+
+```bash
+python felinepaw_tool.py tag feline --proxy http://127.0.0.1:YOUR_PORT
+```
+
+**Option 3: skip the proxy (if direct connection works)**
+
+```bash
+python felinepaw_tool.py tag feline --proxy off
+```
+
+> 90% 的用户可以跳过这一节——除非你改了 Clash 的默认端口（或用 SS / V2RayN / NekoBox / 其他本地代理）。
+> 默认走 `http://127.0.0.1:7897`（Clash / Clash Verge / mihomo 混合端口），改法同上。
+
+## 🆘 Startup failed? / 启动失败？
+
+> If you double-clicked `启动.bat` and saw a wall of Chinese error text, the most common cause is a misconfigured Python. Two steps to fix it.
+
+### Step 1: read the last line / 看报错最关键的一行
+
+| Error sample / 报错样例 | Meaning / 含义 | Fix / 修法 |
+|---|---|---|
+| `'python' is not recognized` | System can't find `python.exe` | Go to §Step 2, set `PYTHON_EXE` |
+| `ModuleNotFoundError: No module named 'requests'` | Python found, but the dep is missing | `pip install requests` (and `lxml` if you use e-hentai / FA / WildDream) |
+| `DLL load failed while importing _tkinter` | Conda env lacks tkinter | `conda install -n YOUR_ENV tk` |
+| `pythonw.exe not found` | Same as "python not found" | Same as above |
+| No error, but the window flashes and disappears | Silent-launcher self-check failed | Run `启动.bat` once directly (it pauses on failure) |
+
+### `No module named ...` → install the missing package / 依赖没装
+
+Only the **last line** of the traceback matters / 只看最后一行：
+
+```text
+Traceback (most recent call last):
+  File "D:\path\to\felinepaw\sites\e-hentai\EH_scraper_v2.py", line 52, in <module>
+    from lxml import etree
+ModuleNotFoundError: No module named 'lxml'
+```
+
+```bat
+python -m pip install requests lxml          :: lxml is only used by the e-hentai site
+python -m pip install DrissionPage           :: optional: FA cookies / yiff-auto browser variant
+```
+
+| Pitfall / 坑 | Symptom / 现象 | Fix / 怎么办 |
+|---|---|---|
+| `pip install` instead of `python -m pip install` | Same `No module named` after "installing" | With several Pythons, bare `pip` may hit a different one. **Always `python -m pip`** / 电脑有多个 Python 时必须用 `python -m pip` |
+| Installed into the wrong interpreter / 装错解释器 | `python -c "import sys; print(sys.executable)"` prints a path outside the env in the traceback | Run `-m pip install` with that env's own interpreter |
+| Downloads hang → `ReadTimeoutError` | pip spins, then times out | Use a mirror: `-i https://pypi.tuna.tsinghua.edu.cn/simple` |
+| `ImportError: DLL load failed while importing etree` | lxml binary doesn't match your Python | `python -m pip install --force-reinstall lxml`, or `conda install lxml` |
+| `'pip' is not recognized` | pip not on PATH | Use `python -m pip` |
+
+Verify / 装完验证（must print `ok`）：
+
+```bat
+python -c "import requests, lxml; print('ok')"
+```
+
+> ⚠️ **Note the difference / 注意区分**：`启动.bat` only self-checks `import felinepaw_gui`, which needs
+> just `requests` + `tkinter`. So **a missing `lxml` will not stop the window from opening** — it only blows
+> up when you actually run the e-hentai site. If the GUI opens but the log shows
+> `ModuleNotFoundError: No module named 'lxml'`, that's this case.
+> （缺 `lxml` 时窗口照样能开，只在跑 e-hentai 站点时才报错。）
+
+### Step 2: tell the script where your Python is / 让脚本知道你的 Python 在哪
+
+If you already have a Python / conda env (named anything, not just `py39` — `myenv` / `ai` / `work` all work),
+you don't need to rename it — just point the script at its `python.exe` full path.
+
+**Permanent (writes to registry, global) / 永久** — open any cmd, copy-paste the line below (replace the path with your own):
+
+```bat
+:: 1. Find your python.exe first
+where python
+:: Output is like: C:\Users\YOUR_NAME\miniconda3\envs\myenv\python.exe
+
+:: 2. Adapt the line above and paste this into cmd
+setx PYTHON_EXE "C:\Users\YOUR_NAME\miniconda3\envs\myenv\python.exe"
+```
+
+`setx` writes to the registry; **you must reopen any cmd for it to take effect**. Then double-click `启动.bat` again.
+
+**Temporary (current cmd only) / 临时**：
+
+```bat
+set PYTHON_EXE=C:\Users\YOUR_NAME\miniconda3\envs\myenv\python.exe
+启动.bat
+```
+
+### Can't find Python at all? / 实在找不到 Python 在哪？
+
+Open any cmd, type:
+
+```bat
+where python
+```
+
+The **first line** of the output is the full path to `python.exe`. Set it as `PYTHON_EXE` and you're done.
+If `where python` returns nothing, you don't have Python installed — install one:
+- Official: https://www.python.org/downloads/ (✓ check **"Add Python to PATH"**)
+- Or Miniconda: https://docs.conda.io/en/latest/miniconda.html
+
+---
+
+## 🖥 No Python? Try a packaged GUI / 不装 Python？试试打包好的 GUI
+
+If you don't have Python installed (or just don't want to touch it), the same engines ship as
+ready-to-run **standalone `.exe` files** under the sister projects — **double-click and run, no
+Python install required**:
+
+> 如果你**没装 Python**（或懒得折腾），同套引擎在姊妹项目里**打包成了独立 `.exe`** —— **双击就能跑，
+> 完全不需要装 Python**：
+
+| GUI / 图形界面 | Source / 来源 | Notes / 说明 |
+|---|---|---|
+| **BBooruDownloader.exe** | [`sites/BBooru/gui/`](sites/BBooru/gui/) — build with `build_exe.bat` (PyInstaller) | Tags / Pool / Artist modes for BBooru. Prebuilt binary is published under [Releases](../../releases) |
+| **[E621Downloader.exe](https://github.com/SparkSlugcat/e621-downloader)** | [e621-downloader](https://github.com/SparkSlugcat/e621-downloader) — sibling repo | Five e621 modes (tag / tag-page / artist / pool / pool-reversed); bilingual (中文 / English) UI, live log + Stop button. Grab it from [Releases](https://github.com/SparkSlugcat/e621-downloader/releases/latest) |
+
+> 💡 In one line: **want a `.exe` for BBooru** → grab `BBooruDownloader.exe` from this repo's
+> Releases; **want a `.exe` for e621** → grab `E621Downloader.exe` from the e621-downloader
+> Releases. Both are double-click-and-run.
+>
+> 一句话：**BBooru 用 exe** → 本仓库 [Releases](../../releases) 里下 `BBooruDownloader.exe`；
+> **e621 用 exe** → [e621-downloader](https://github.com/SparkSlugcat/e621-downloader/releases/latest) 的 Releases 下 `E621Downloader.exe`。都是双击即用。
 
 ---
 
@@ -40,15 +199,15 @@ Or launch the GUI: `python felinepaw_gui.py`
 > 或者直接开图形界面：`python felinepaw_gui.py`
 
 **Windows: just double-click `启动.bat`.** It auto-detects a local Python 3.9 environment
-(a conda `py39` under `%USERPROFILE%`, or whatever `PYTHON_EXE` points at — no PATH fiddling)
+(a conda `Python 3.9` env under `%USERPROFILE%`, or whatever `PYTHON_EXE` points at — no PATH fiddling)
 and runs an import self-check first, so a missing dependency shows up as a readable traceback
-instead of a window that silently never appears. Want no console flash at all? Double-click
-**`启动(无窗口).vbs`** instead.
+instead of a window that silently never appears. (A console window flashes for a moment — that's
+unavoidable, since a `.bat` must be parsed by `cmd.exe`.)
 
 > **Windows 用户：双击 `启动.bat` 就能开图形界面。** 它会自动找到本机的 Python 3.9 环境
-> （`%USERPROFILE%` 下的 conda `py39`，或环境变量 `PYTHON_EXE` 指向的那个），不用你自己配 PATH；
+> （`%USERPROFILE%` 下的 conda Python 3.9 环境，或环境变量 `PYTHON_EXE` 指向的那个），不用你自己配 PATH；
 > 启动前先做一次导入自检，缺依赖时会把 traceback 直接打出来，而不是"双击了没反应"。
-> 若想连那一闪而过的命令行窗口都省掉，双击 **`启动(无窗口).vbs`**。
+> 命令行窗口会闪一下——那是必然的（`.bat` 必须由 `cmd.exe` 解析），不影响使用。
 >
 > ⚠️ 脚本里**不含任何写死的路径** —— 换机器、换 conda 环境都不用改文件；真找不到环境时，
 > 它会告诉你怎么用 `PYTHON_EXE` 指定。
@@ -93,7 +252,7 @@ Every field on the form, what it sets, and the one trap worth knowing:
 | **全量查池** | `--force-pool-check` | 仅 bbooru 的 artist 模式：默认只探测前 10 个帖子，勾上则全部查一遍 |
 | **pool 反转编号** | `--pool-rev` | 仅 bbooru 池子下载：文件编号倒序 |
 | **重新下载(--force)** | `--force` | 已经存在的图也重新下一遍（修复下到一半的坏文件）。对 bbooru / hypnohub / rule34us / e-hentai 生效 |
-| **挑序号(--pick)** | `--pick` | **e-hentai / e621 artist**：只下名单里的第几项，如 `2-4,7` |
+| **挑序号(--pick)** | `--pick` | **e-hentai / e621 artist / bbooru**：只下名单里的第几项，如 `2-4,7` |
 | **每画廊限张(--pages)** | `--pages` | 仅 e-hentai：每个画廊只取前 N 张 |
 | **只列名单(--dry-run)** | `--dry-run` | **e-hentai / e621 artist / bbooru / hypnohub / rule34us**：只列出会下哪些，不真下 |
 
@@ -387,6 +546,14 @@ modes as the CLI: tags / pool / artist.
 > 图形界面**同进程**调用 `B_scraper.main(argv)`（不是起子进程），把引擎日志接到窗口里，Stop 按钮直接调引擎的 `request_cancel()`。
 > 三种模式和命令行完全一致：标签 / 池子 / 艺术家。
 
+It also has a **"☑ 挑着下载" (pick) button**: it collects the list first (nothing is downloaded), opens a
+tick-box window grouped exactly like the CLI numbering, and then downloads only the rows you left checked
+(internally `--pick 2,4,7`). Cancel the dialog and nothing is downloaded.
+
+> 界面上还有个 **「☑ 挑着下载」** 按钮：先只收集列表（一张图都不下），弹出一个带勾选框的窗口
+> （编号和命令行 `--dry-run` 完全一致），只下你留下的那些（内部就是 `--pick 2,4,7`）。
+> 不想下就点「取消」，什么都不会下载。
+
 > Prebuilt `BBooruDownloader.exe` is published under
 > [Releases](../../releases) rather than committed here — a 12 MB binary in git history would
 > bloat every clone forever.
@@ -504,7 +671,6 @@ felinepaw/
 ├── felinepaw_tool.py       # unified CLI launcher (all sites, whitelist param passthrough) / 统一命令行入口（全站点，白名单参数透传）
 ├── felinepaw_gui.py        # unified tkinter GUI / 统一 tkinter 图形界面
 ├── 启动.bat               # Windows: double-click → GUI (auto-detects Python + import self-check) / Windows 双击启动图形界面（自动定位 Python + 导入自检）
-├── 启动(无窗口).vbs        # same, with zero console flash / 同上，零命令行窗口
 └── sites/
     ├── e621/               # 5 CLI scripts (tags / page / artist / pool / pool-reversed) / 5 个 CLI 脚本（标签 / 分页 / 画师 / 池子 / 池子反转）
     ├── e-hentai/           # EH_scraper_v2.py (API + HTML)
