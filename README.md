@@ -556,10 +556,12 @@ tick-box window grouped exactly like the CLI numbering, and then downloads only 
 > 不想下就点「取消」，什么都不会下载。
 
 > Prebuilt `BBooruDownloader.exe` is published under
-> [Releases](../../releases) rather than committed here — a 12 MB binary in git history would
-> bloat every clone forever.
+> [Releases](../../releases) rather than committed here — an 18 MB binary in git history would
+> bloat every clone forever. (It was called `BBooruPaw.exe` up to v1; renamed in v1.1 to match the
+> name in the PyInstaller spec.)
 >
-> 预编译的 `BBooruDownloader.exe` 发布在 [Releases](../../releases) 里，**不进仓库** —— 12 MB 的二进制塞进 git 历史会让每次 clone 都变重。
+> 预编译的 `BBooruDownloader.exe` 发布在 [Releases](../../releases) 里，**不进仓库** —— 18 MB 的二进制塞进 git 历史会让每次 clone 都变重。
+> （v1 时叫 `BBooruPaw.exe`，v1.1 起与 spec 里的名字统一。）
 
 ## 🔒 Security / 安全
 
