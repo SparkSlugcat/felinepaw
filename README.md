@@ -198,18 +198,19 @@ Or launch the GUI: `python felinepaw_gui.py`
 
 > 或者直接开图形界面：`python felinepaw_gui.py`
 
-**Windows: just double-click `启动.bat`.** It auto-detects a local Python 3.9 environment
-(a conda `Python 3.9` env under `%USERPROFILE%`, or whatever `PYTHON_EXE` points at — no PATH fiddling)
-and runs an import self-check first, so a missing dependency shows up as a readable traceback
-instead of a window that silently never appears. (A console window flashes for a moment — that's
-unavoidable, since a `.bat` must be parsed by `cmd.exe`.)
+**Windows: just double-click `启动.bat`.** It doesn't guess environment names — it walks the
+`envs` folders of any conda install under `%USERPROFILE%` / `%LOCALAPPDATA%`, runs `import requests`
+inside each candidate, and keeps the first one that succeeds (if `PYTHON_EXE` is set, it wins
+outright). Then it runs an import self-check, so a missing dependency shows up as a readable
+traceback instead of a window that silently never appears. (A console window flashes for a moment —
+that's unavoidable, since a `.bat` must be parsed by `cmd.exe`.)
 
-> **Windows 用户：双击 `启动.bat` 就能开图形界面。** 它会自动找到本机的 Python 3.9 环境
-> （`%USERPROFILE%` 下的 conda Python 3.9 环境，或环境变量 `PYTHON_EXE` 指向的那个），不用你自己配 PATH；
-> 启动前先做一次导入自检，缺依赖时会把 traceback 直接打出来，而不是"双击了没反应"。
-> 命令行窗口会闪一下——那是必然的（`.bat` 必须由 `cmd.exe` 解析），不影响使用。
+> **Windows 用户：双击 `启动.bat` 就能开图形界面。** 它不猜环境名 —— 直接扫 conda 的 `envs`
+> 目录，挨个试 `import requests`，谁通过就用谁（设了 `PYTHON_EXE` 就以它为准），所以排在前面的
+> 环境缺库也不会被误选；随后再做一次导入自检，缺依赖时把 traceback 直接打出来，
+> 而不是"双击了没反应"。命令行窗口会闪一下——那是必然的（`.bat` 必须由 `cmd.exe` 解析），不影响使用。
 >
-> ⚠️ 脚本里**不含任何写死的路径** —— 换机器、换 conda 环境都不用改文件；真找不到环境时，
+> ⚠️ 脚本里**不含任何写死的路径** —— 换机器、换 conda 环境都不用改文件；一个都扫不到时，
 > 它会告诉你怎么用 `PYTHON_EXE` 指定。
 
 ## 🖥 GUI guide / 图形界面使用指南
