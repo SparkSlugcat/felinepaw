@@ -171,14 +171,14 @@ Python install required**:
 
 | GUI / 图形界面 | Source / 来源 | Notes / 说明 |
 |---|---|---|
-| **BBooruDownloader.exe** | [`sites/BBooru/gui/`](sites/BBooru/gui/) — build with `build_exe.bat` (PyInstaller) | Tags / Pool / Artist modes for BBooru. Prebuilt binary is published under [Releases](../../releases) |
+| **BBoorupaw.exe** | [`sites/BBooru/gui/`](sites/BBooru/gui/) — build with `build_exe.bat` (PyInstaller) | Tags / Pool / Artist modes for BBooru. Prebuilt binary is published under [Releases](../../releases) |
 | **[E621Downloader.exe](https://github.com/SparkSlugcat/e621-downloader)** | [e621-downloader](https://github.com/SparkSlugcat/e621-downloader) — sibling repo | Five e621 modes (tag / tag-page / artist / pool / pool-reversed); bilingual (中文 / English) UI, live log + Stop button. Grab it from [Releases](https://github.com/SparkSlugcat/e621-downloader/releases/latest) |
 
-> 💡 In one line: **want a `.exe` for BBooru** → grab `BBooruDownloader.exe` from this repo's
+> 💡 In one line: **want a `.exe` for BBooru** → grab `BBoorupaw.exe` from this repo's
 > Releases; **want a `.exe` for e621** → grab `E621Downloader.exe` from the e621-downloader
 > Releases. Both are double-click-and-run.
 >
-> 一句话：**BBooru 用 exe** → 本仓库 [Releases](../../releases) 里下 `BBooruDownloader.exe`；
+> 一句话：**BBooru 用 exe** → 本仓库 [Releases](../../releases) 里下 `BBoorupaw.exe`；
 > **e621 用 exe** → [e621-downloader](https://github.com/SparkSlugcat/e621-downloader/releases/latest) 的 Releases 下 `E621Downloader.exe`。都是双击即用。
 
 ---
@@ -537,7 +537,7 @@ and can be frozen into a single `.exe`:
 
 ```bat
 python sites/BBooru/gui/app.py      :: run the GUI from source
-cd sites/BBooru/gui & build_exe.bat :: build dist\BBooruDownloader.exe (needs PyInstaller)
+cd sites/BBooru/gui & build_exe.bat :: build dist\BBoorupaw.exe (needs PyInstaller)
 ```
 
 The GUI calls `B_scraper.main(argv)` **in-process** (no subprocess), pipes the engine log into the
@@ -555,12 +555,12 @@ tick-box window grouped exactly like the CLI numbering, and then downloads only 
 > （编号和命令行 `--dry-run` 完全一致），只下你留下的那些（内部就是 `--pick 2,4,7`）。
 > 不想下就点「取消」，什么都不会下载。
 
-> Prebuilt `BBooruDownloader.exe` is published under
+> Prebuilt `BBoorupaw.exe` is published under
 > [Releases](../../releases) rather than committed here — an 18 MB binary in git history would
 > bloat every clone forever. (It was called `BBooruPaw.exe` up to v1; renamed in v1.1 to match the
 > name in the PyInstaller spec.)
 >
-> 预编译的 `BBooruDownloader.exe` 发布在 [Releases](../../releases) 里，**不进仓库** —— 18 MB 的二进制塞进 git 历史会让每次 clone 都变重。
+> 预编译的 `BBoorupaw.exe` 发布在 [Releases](../../releases) 里，**不进仓库** —— 18 MB 的二进制塞进 git 历史会让每次 clone 都变重。
 > （v1 时叫 `BBooruPaw.exe`，v1.1 起与 spec 里的名字统一。）
 
 ## 🔒 Security / 安全
@@ -680,7 +680,7 @@ felinepaw/
     ├── yiff/               # yiff_scraper.py + yiff_auto_scraper.py (browser) / （浏览器版）
     ├── furaffinity/        # FA_scraper.py + FA_get_cookies.py
     ├── BBooru/             # B_scraper.py (JSON API tags / pools / artist mode) / （JSON API：标签 / 池子 / 艺术家模式）
-    │   └── gui/            # app.py + BBooruDownloader.spec (tkinter GUI / single-file exe) / （tkinter 界面 / 单文件 exe）
+    │   └── gui/            # app.py + BBoorupaw.spec (tkinter GUI / single-file exe) / （tkinter 界面 / 单文件 exe）
     ├── wilddream/          # W_scraper.py (comic gallery downloader) / （整本漫画下载）
     ├── hypnohub/           # H_scraper.py (HTML only) / （仅 HTML）
     └── rule34us/           # R_scraper.py (HTML only) / （仅 HTML）

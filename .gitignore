@@ -14,7 +14,7 @@ dist/
 build/
 *.spec
 # 例外：GUI 的 PyInstaller 配方是仓库用户重新打包所必需的，必须提交
-!sites/BBooru/gui/BBooruDownloader.spec
+!sites/BBooru/gui/BBoorupaw.spec
 
 # 第三方本地依赖目录
 _dsp_env/

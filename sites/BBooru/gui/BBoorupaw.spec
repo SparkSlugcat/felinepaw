@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec — BBooru 下载器（单文件 GUI exe）
-构建：python -m PyInstaller --noconfirm BBooruDownloader.spec
+构建：python -m PyInstaller --noconfirm BBoorupaw.spec
 （PyInstaller 环境：本文件所在目录的说明见 build_exe.bat / README.md）
 """
 import os
@@ -54,7 +54,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="BBooruDownloader",
+    name="BBoorupaw",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

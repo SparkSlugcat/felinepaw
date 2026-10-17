@@ -1,27 +1,27 @@
 @echo off
 cd /d "%~dp0"
 echo ============================================
-echo   BBooru ä¸‹è½½å™¨ - æ‰“åŒ…æˆç‹¬ç«‹ exe
+echo   BBooru ÏÂÔØÆ÷ - ´ò°ü³É¶ÀÁ¢ exe
 echo ============================================
 
-rem ä¼˜å…ˆå¤ç”¨ e621-downloader å·²è£…å¥½çš„ PyInstaller ç¯å¢ƒï¼ˆ_pyi_envï¼‰ï¼Œé¿å…é‡å¤ä¸‹è½½å®‰è£…
+rem ÓÅÏÈ¸´ÓÃ e621-downloader ÒÑ×°ºÃµÄ PyInstaller »·¾³£¨_pyi_env£©£¬±ÜÃâÖØ¸´ÏÂÔØ°²×°
 set "PYI_ENV=%~dp0..\..\..\..\scraper\e621\e621_gui\_pyi_env"
 if exist "%PYI_ENV%\PyInstaller" (
-    echo ä½¿ç”¨å·²æœ‰ PyInstaller ç¯å¢ƒ: %PYI_ENV%
+    echo Ê¹ÓÃÒÑÓĞ PyInstaller »·¾³: %PYI_ENV%
     set "PYTHONPATH=%PYI_ENV%"
 ) else (
-    echo æœªæ‰¾åˆ° _pyi_envï¼Œå°è¯•å®‰è£… PyInstaller ...
+    echo Î´ÕÒµ½ _pyi_env£¬³¢ÊÔ°²×° PyInstaller ...
     pip install pyinstaller
 )
 
-echo å¼€å§‹æ‰“åŒ…ï¼ˆçº¦éœ€ 1-3 åˆ†é’Ÿï¼‰...
-python -m PyInstaller --noconfirm BBooruDownloader.spec
+echo ¿ªÊ¼´ò°ü£¨Ô¼Ğè 1-3 ·ÖÖÓ£©...
+python -m PyInstaller --noconfirm BBoorupaw.spec
 
 echo.
-if exist "dist\BBooruDownloader.exe" (
-    echo æ‰“åŒ…å®Œæˆï¼ç”Ÿæˆæ–‡ä»¶ï¼šdist\BBooruDownloader.exe
-    echo å¯è‡ªæ£€ï¼šdist\BBooruDownloader.exe --selftest   ç„¶åçœ‹ %%TEMP%%\bbooru_selftest.txt
+if exist "dist\BBoorupaw.exe" (
+    echo ´ò°üÍê³É£¡Éú³ÉÎÄ¼ş£ºdist\BBoorupaw.exe
+    echo ¿É×Ô¼ì£ºdist\BBoorupaw.exe --selftest   È»ºó¿´ %%TEMP%%\bbooru_selftest.txt
 ) else (
-    echo æ‰“åŒ…å¤±è´¥ï¼Œè¯·æŸ¥çœ‹ä¸Šé¢çš„é”™è¯¯ä¿¡æ¯ã€‚
+    echo ´ò°üÊ§°Ü£¬Çë²é¿´ÉÏÃæµÄ´íÎóĞÅÏ¢¡£
 )
 pause

@@ -4,7 +4,7 @@
 
 ## 直接使用（打包后）
 
-双击 `dist\BBooruDownloader.exe`，界面里：
+双击 `dist\BBoorupaw.exe`，界面里：
 
 - **模式**：标签(Tags) / 合集(Pool) / 艺术家(Artist)
 - 标签模式：填 `--tags`（多标签空格分隔），引擎可选 auto/api/html
@@ -17,7 +17,7 @@
 
 自检（不开窗口，验证依赖完整）：
 ```
-dist\BBooruDownloader.exe --selftest
+dist\BBoorupaw.exe --selftest
 :: 然后查看 %TEMP%\bbooru_selftest.txt
 ```
 
@@ -29,10 +29,10 @@ build_exe.bat
 或手动（复用 e621-downloader 的 PyInstaller 环境，避免重复安装）：
 ```bat
 set PYTHONPATH=..\..\..\..\scraper\e621\e621_gui\_pyi_env
-python -m PyInstaller --noconfirm BBooruDownloader.spec
+python -m PyInstaller --noconfirm BBoorupaw.spec
 ```
 
-产出：`dist\BBooruDownloader.exe`（单文件、无控制台、图标 assets/icon.ico）。
+产出：`dist\BBoorupaw.exe`（单文件、无控制台、图标 assets/icon.ico）。
 
 ## 说明 / 依赖关系
 

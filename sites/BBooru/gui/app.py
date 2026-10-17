@@ -8,7 +8,7 @@ BBooru 下载器 GUI（tkinter）— 配合 B_scraper.py 打包成独立 exe
 - 支持 --selftest（打包后自检：不开窗口，验证 frozen 环境能 import requests/common/B_scraper）
 
 开发运行：python app.py
-打包：见同目录 build_exe.bat / BBooruDownloader.spec
+打包：见同目录 build_exe.bat / BBoorupaw.spec
 """
 
 import io
