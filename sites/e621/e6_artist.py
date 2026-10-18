@@ -42,6 +42,8 @@ for _p in (os.path.dirname(os.path.dirname(_here)), os.path.dirname(_here), _her
         sys.path.insert(0, _p)
         break
 import common
+# i18n 词条表与 common.py 同在项目根，上面的 sys.path 已把它放好
+import i18n
 
 # ---------- 配置 ----------
 HEADERS = {
@@ -71,9 +73,9 @@ def create_session(proxy=None):
     session = common.create_session(proxy, HEADERS)
     if API_USER and API_KEY:
         session.auth = (API_USER, API_KEY)
-        print("已使用认证信息登录")
+        print(i18n.t("e6_logged_in"))
     else:
-        print("以游客身份访问（部分内容可能受限）")
+        print(i18n.t("e6_guest_limited"))
     return session
 
 
@@ -109,13 +111,13 @@ def fetch_all_post_ids(tags: str) -> list[int]:
             if not posts:
                 break
             all_ids.extend(post["id"] for post in posts)
-            print(f"  第 {page} 页，获取到 {len(posts)} 个帖子（累计 {len(all_ids)}）")
+            print(i18n.t("e6_page_fetched", page=page, got=len(posts), total=len(all_ids)))
             if len(posts) < POSTS_PER_REQUEST:
                 break
             page += 1
             time.sleep(REQUEST_DELAY)
         except Exception as e:
-            print(f"获取帖子列表失败（第 {page} 页）: {e}")
+            print(i18n.t("e6_list_failed_page", page=page, e=e))
             break
     return all_ids
 
@@ -156,7 +158,7 @@ def download_post(post, output_dir: Path, lock: threading.Lock) -> bool:
         file_url = post.get("sample", {}).get("url")
         ext = post.get("sample", {}).get("ext", ext or "jpg")
     if not file_url:
-        print(f"  帖子 #{pid} 无可用 URL，跳过")
+        print(i18n.t("e6_post_no_url_skip_indent", pid=pid))
         return False
 
     filename = f"{pid}.{ext}"
@@ -173,7 +175,7 @@ def download_post(post, output_dir: Path, lock: threading.Lock) -> bool:
         os.utime(filepath, None)
         return True
     except Exception as e:
-        print(f"  下载帖子 #{pid} 失败: {e}")
+        print(i18n.t("e6_post_download_failed_indent", pid=pid, err=e))
         if filepath.exists():
             filepath.unlink()
         return False
@@ -191,11 +193,11 @@ def download_posts_to_dir(post_ids: list[int], output_dir: Path):
         try:
             posts_details.extend(fetch_posts_details_batch(batch_ids))
         except Exception as e:
-            print(f"批量获取帖子信息失败: {e}")
+            print(i18n.t("e6_batch_info_failed", e=e))
         time.sleep(REQUEST_DELAY)
 
     if not posts_details:
-        print("  没有找到帖子信息")
+        print(i18n.t("e6_no_post_info_indent"))
         return
 
     # 并发下载
@@ -209,7 +211,7 @@ def download_posts_to_dir(post_ids: list[int], output_dir: Path):
             else:
                 fail_count += 1
 
-    print(f"  下载完成：成功 {success_count}，失败/跳过 {fail_count}")
+    print(i18n.t("e6_dir_download_summary_indent", ok=success_count, bad=fail_count))
 
 
 # ============================================================
@@ -226,7 +228,7 @@ def save_manifest(path, payload):
         os.replace(tmp, str(path))
         return True
     except OSError as e:
-        print(f"名单写入失败：{e}")
+        print(i18n.t("e6_manifest_write_failed", e=e))
         return False
 
 
@@ -236,9 +238,9 @@ def load_manifest(path):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
-        print(f"找不到名单文件：{path}")
+        print(i18n.t("e6_manifest_not_found", path=path))
     except (OSError, ValueError) as e:
-        print(f"名单文件读不了（{type(e).__name__}）：{e}")
+        print(i18n.t("e6_manifest_unreadable", kind=type(e).__name__, e=e))
     return None
 
 
@@ -249,17 +251,18 @@ def show_manifest_list(items, artist_tag=""):
     表格列（尤其含中文表头）会对不齐，逐行反而一眼能读。
     名单里出现同名 Pool 时，额外标出 pool id 以便区分。
     """
-    suffix = f"（艺术家: {artist_tag}）" if artist_tag else ""
+    suffix = i18n.t("e6_artist_suffix", tag=artist_tag) if artist_tag else ""
     pool_names = [it["name"] for it in items if it["kind"] == "pool"]
     dup = {n for n in pool_names if pool_names.count(n) > 1}
-    print(f"\n===== 下载名单{suffix} =====")
+    print(i18n.t("e6_manifest_title", suffix=suffix))
     for i, it in enumerate(items, 1):
         if it["kind"] == "pool":
             tag = f"  [pool id {it['pool_id']}]" if it["name"] in dup else ""
-            print(f"  {i:>3}. [pool]   {it['name']}{tag}   （{it.get('count', 0)} 个作品）")
+            print(i18n.t("e6_manifest_pool_line", idx=i, name=it["name"], tag=tag,
+                         count=it.get('count', 0)))
         else:
-            print(f"  {i:>3}. [others] 不属于任何池   （{it.get('count', 0)} 个作品）")
-    print(f"  共 {len(items)} 项。用 --pick 1,3 挑着下，编号就是上面的 #")
+            print(i18n.t("e6_manifest_others_line", idx=i, count=it.get('count', 0)))
+    print(i18n.t("e6_manifest_footer", n=len(items)))
 
 
 def collect_manifest_items(artist_tag):
@@ -274,20 +277,20 @@ def collect_manifest_items(artist_tag):
     items 里 pool 项只存 pool_id（下载时现拉 post_ids，清单小且能容忍池内容变化）；
     others 项直接存 post_ids（否则 --from-manifest 跳过检索后就无法复现这批帖子）。
     """
-    print("正在获取艺术家所有帖子 ID...")
+    print(i18n.t("e6_artist_ids_fetching"))
     all_ids = fetch_all_post_ids(artist_tag)
     if not all_ids:
         return [], 0
-    print(f"共找到 {len(all_ids)} 个帖子")
+    print(i18n.t("e6_total_found", n=len(all_ids)))
 
-    print("正在获取帖子详细信息以提取 Pool 信息...")
+    print(i18n.t("e6_posts_detail_for_pools"))
     posts = []
     for i in range(0, len(all_ids), POSTS_PER_REQUEST):
         batch_ids = all_ids[i:i + POSTS_PER_REQUEST]
         try:
             posts.extend(fetch_posts_details_batch(batch_ids))
         except Exception as e:
-            print(f"批量获取帖子信息失败: {e}")
+            print(i18n.t("e6_batch_info_failed", e=e))
         time.sleep(REQUEST_DELAY)
 
     pool_ids = set()
@@ -299,7 +302,7 @@ def collect_manifest_items(artist_tag):
         else:
             others_ids.append(post["id"])
 
-    print(f"发现 {len(pool_ids)} 个相关 Pool，{len(others_ids)} 个帖子不属于任何池")
+    print(i18n.t("e6_pools_found", pools=len(pool_ids), others=len(others_ids)))
 
     # 拉每个 Pool 的名称与作品数（dry-run 要显示，排序也需要名字）
     pool_items = []
@@ -311,7 +314,7 @@ def collect_manifest_items(artist_tag):
             pool_items.append({"kind": "pool", "pool_id": pid,
                                "name": name, "count": count})
         except Exception as e:
-            print(f"  获取 Pool {pid} 信息失败: {e}")
+            print(i18n.t("e6_pool_info_failed_indent", id=pid, e=e))
         time.sleep(REQUEST_DELAY)
 
     # ⚠️ 稳定排序：set 的迭代顺序不定，不排序会让"dry-run 看到的 #2"
@@ -339,38 +342,31 @@ def collect_manifest_items(artist_tag):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="下载艺术家作品并按 Pool 分组（含 dry-run 名单 / --pick 挑着下）",
+        description=i18n.t("e6_artist_desc"),
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""示例:
-  %(prog)s --tags artist_name                    # 全部下载
-  %(prog)s --tags artist_name --dry-run          # 只看名单（存 JSON，不下载）
-  %(prog)s --tags artist_name --pick 1,3         # 只下名单里的第 1、3 项
-  %(prog)s --from-manifest e6_artist_manifest.json --pick 2-4   # 从已存名单挑着下
-
---pick 的编号 = dry-run 打印的 #（Pool 按名称排序，others 固定最后）。
-""" % {"prog": os.path.basename(sys.argv[0])})
-    parser.add_argument("--tags", default=None, help="艺术家标签，例如 artist_name")
-    parser.add_argument("-o", "--output", default=None, help="输出根目录（默认为艺术家标签名）")
+        epilog=i18n.t("e6_artist_epilog", prog=os.path.basename(sys.argv[0])))
+    parser.add_argument("--tags", default=None, help=i18n.t("e6_artist_tags_help"))
+    parser.add_argument("-o", "--output", default=None, help=i18n.t("e6_artist_output_help"))
     parser.add_argument(
         "--skip-others",
         action="store_true",
-        help="跳过不属于任何 Pool 的帖子（用 --pick 显式选中 others 时以 --pick 为准）"
+        help=i18n.t("e6_skip_others_help")
     )
     parser.add_argument("--dry-run", action="store_true",
-                        help="只列名单不下载（同时把名单写进 --manifest 指的文件）")
+                        help=i18n.t("e6_dry_run_help"))
     parser.add_argument("--pick", default=None,
-                        help="按名单序号挑着下，如 2-4,7 / 3- / all（编号 = dry-run 看到的 #）")
+                        help=i18n.t("e6_pick_help"))
     parser.add_argument("--manifest", default=MANIFEST_DEFAULT,
-                        help=f"--dry-run 保存名单的文件名（默认 {MANIFEST_DEFAULT}）")
+                        help=i18n.t("e6_manifest_help", name=MANIFEST_DEFAULT))
     parser.add_argument("--from-manifest", default=None, metavar="FILE",
-                        help="从这个名单文件读结果，跳过检索（配合 --pick 精确复现）")
+                        help=i18n.t("e6_from_manifest_help"))
     args = parser.parse_args()
 
     # ---------- 0. 参数检查：--tags 与 --from-manifest 二选一 ----------
     if bool(args.tags) == bool(args.from_manifest):
-        print("请给出 --tags <艺术家标签> 或 --from-manifest <名单文件>（二选一）。")
-        print(f"  例：python e6_artist.py --tags artist_name --dry-run")
-        print(f"  例：python e6_artist.py --from-manifest {MANIFEST_DEFAULT} --pick 2-4,7")
+        print(i18n.t("e6_need_tags_or_manifest"))
+        print(i18n.t("e6_example_dry_run"))
+        print(i18n.t("e6_example_manifest", name=MANIFEST_DEFAULT))
         return 1
 
     # ---------- 1. 拿名单 ----------
@@ -382,15 +378,16 @@ def main():
         items = payload.get("items") or []
         artist_tag = payload.get("query") or ""
         if not items:
-            print("名单里没有可下载的项。")
+            print(i18n.t("e6_manifest_empty"))
             return 1
-        print(f"从名单读回 {len(items)} 项（原艺术家: {artist_tag or '(未记录)'}）")
+        print(i18n.t("e6_manifest_read", n=len(items),
+                     tag=artist_tag or i18n.t("e6_artist_unrecorded")))
     else:
         artist_tag = args.tags.strip()
-        print(f"艺术家标签: {artist_tag}")
+        print(i18n.t("e6_artist_tag", tag=artist_tag))
         items, total_posts = collect_manifest_items(artist_tag)
         if not items:
-            print("没有找到任何帖子。")
+            print(i18n.t("e6_no_posts_at_all"))
             return 1
 
     # ---------- 2. 展示名单 ----------
@@ -407,9 +404,9 @@ def main():
             "items": items,
         }
         if save_manifest(args.manifest, payload):
-            print(f"\n名单已保存: {os.path.abspath(args.manifest)}")
-            print(f"下次可用: python {os.path.basename(sys.argv[0])} "
-                  f"--from-manifest {args.manifest} --pick 1,3")
+            print(i18n.t("e6_manifest_saved", path=os.path.abspath(args.manifest)))
+            print(i18n.t("e6_manifest_next_hint", prog=os.path.basename(sys.argv[0]),
+                         manifest=args.manifest))
         return 0
 
     # ---------- 4. 挑序号 ----------
@@ -418,45 +415,47 @@ def main():
         if idx is None:
             return 1
         picked = [(i, items[i - 1]) for i in idx]
-        print(f"\n--pick 挑出 {len(picked)} 项: {', '.join(str(i) for i in idx)}")
+        print(i18n.t("e6_pick_selected", n=len(picked),
+                     idx=', '.join(str(i) for i in idx)))
     else:
         picked = list(enumerate(items, 1))
         if args.skip_others:
             before = len(picked)
             picked = [(n, it) for n, it in picked if it["kind"] != "others"]
             if len(picked) < before:
-                print(f"\n--skip-others 生效：跳过 others（{before - len(picked)} 项）")
+                print(i18n.t("e6_skip_others_applied", n=before - len(picked)))
 
     # ---------- 5. 输出目录 ----------
     if args.output:
         root_dir = Path(args.output)
     else:
         root_dir = Path(sanitize_filename(artist_tag or "artist"))
-    print(f"输出根目录: {root_dir.resolve()}")
+    print(i18n.t("e6_output_root", path=root_dir.resolve()))
 
     # ---------- 6. 逐项下载 ----------
     for seq, (no, item) in enumerate(picked, 1):
         if item["kind"] == "pool":
-            print(f"\n[{seq}/{len(picked)}] Pool #{item.get('pool_id')} {item['name']}")
+            print(i18n.t("e6_pool_header", seq=seq, total=len(picked),
+                         id=item.get('pool_id'), name=item['name']))
             try:
                 post_ids = fetch_pool_info(item["pool_id"]).get("post_ids") or []
             except Exception as e:
-                print(f"  获取 Pool {item.get('pool_id')} 失败: {e}")
+                print(i18n.t("e6_pool_fetch_failed_indent", id=item.get('pool_id'), e=e))
                 continue
             # 目录名用名单里算好的 dir（同名 Pool 已带 _<id> 消歧）；
             # 旧名单没有 dir 字段时退回按名称。
             sub = item.get("dir") or sanitize_filename(item["name"])
         else:
-            print(f"\n[{seq}/{len(picked)}] others")
+            print(i18n.t("e6_others_header", seq=seq, total=len(picked)))
             post_ids = item.get("post_ids") or []
             sub = item.get("dir") or "others"
 
         if not post_ids:
-            print("  该项没有作品，跳过。")
+            print(i18n.t("e6_item_no_posts_indent"))
             continue
         download_posts_to_dir(post_ids, root_dir / sub)
 
-    print("\n全部完成！文件保存在:", root_dir.resolve())
+    print(i18n.t("e6_all_done"), root_dir.resolve())
     return 0
 
 

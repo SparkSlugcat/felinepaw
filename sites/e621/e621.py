@@ -24,6 +24,8 @@ for _p in (os.path.dirname(os.path.dirname(_here)), os.path.dirname(_here), _her
         sys.path.insert(0, _p)
         break
 import common
+# i18n 词条表与 common.py 同在项目根，上面的 sys.path 已把它放好
+import i18n
 
 # ---------- 配置 ----------
 HEADERS = {
@@ -72,7 +74,7 @@ def extract_pool_id(pool_url: str) -> str:
         idx = parts.index("pools")
         if idx + 1 < len(parts):
             return parts[idx + 1]
-    raise ValueError(f"无法从 URL 中提取 Pool ID: {pool_url}")
+    raise ValueError(i18n.t("e6_err_pool_id", url=pool_url))
 
 
 def get_pool_info(pool_id: str) -> dict:
@@ -143,36 +145,36 @@ def sanitize_filename(name: str) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="下载 e621/e926 指定 Pool 中的所有图片（反转编号）")
-    parser.add_argument("pool_url", help="Pool 页面完整 URL，例如 https://e621.net/pools/12345")
-    parser.add_argument("-o", "--output", default=None, help="图片保存目录（默认以 Pool 名称命名）")
+    parser = argparse.ArgumentParser(description=i18n.t("e6_rev_desc"))
+    parser.add_argument("pool_url", help=i18n.t("e6_pool_url_help"))
+    parser.add_argument("-o", "--output", default=None, help=i18n.t("e6_output_help_pool"))
     args = parser.parse_args()
 
     pool_url = args.pool_url.strip()
     try:
         pool_id = extract_pool_id(pool_url)
     except ValueError as e:
-        print(f"错误: {e}")
+        print(i18n.t("e6_err_prefix", e=e))
         sys.exit(1)
 
-    print(f"解析到 Pool ID: {pool_id}")
+    print(i18n.t("e6_pool_id_parsed", id=pool_id))
 
     # 1. 获取 Pool 信息
-    print("正在获取 Pool 信息...")
+    print(i18n.t("e6_pool_info_fetching"))
     try:
         pool_info = get_pool_info(pool_id)
     except requests.RequestException as e:
-        print(f"获取 Pool 信息失败: {e}")
+        print(i18n.t("e6_pool_info_failed", e=e))
         sys.exit(1)
 
     pool_name = pool_info.get("name", f"pool_{pool_id}")
     post_ids = pool_info.get("post_ids", [])
     if not post_ids:
-        print("该 Pool 中没有作品。")
+        print(i18n.t("e6_pool_empty"))
         return
 
-    print(f"Pool 名称: {pool_name}")
-    print(f"作品数量: {len(post_ids)}")
+    print(i18n.t("e6_pool_name", name=pool_name))
+    print(i18n.t("e6_post_count", n=len(post_ids)))
 
     # 确定输出目录
     if args.output:
@@ -182,8 +184,8 @@ def main():
         output_dir = Path(safe_name)
     output_dir.mkdir(parents=True, exist_ok=True)
     if not output_dir.exists():
-        print(f"错误：无法创建输出目录 {output_dir}")
-        print("可能包含系统不支持的字符，尝试使用 Pool ID 作为备用目录名...")
+        print(i18n.t("e6_err_mkdir", path=output_dir))
+        print(i18n.t("e6_mkdir_fallback"))
         output_dir = Path(f"pool_{pool_id}")
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -191,20 +193,21 @@ def main():
     downloadable = []   # 元素: (post_id, url, ext)
     failed_ids = []     # 无任何可用 URL 的作品 ID
 
-    print("正在获取作品详细信息...")
+    print(i18n.t("e6_posts_detail_fetching"))
     total_posts = len(post_ids)
     for i in range(0, total_posts, POSTS_PER_REQUEST):
         batch_ids = post_ids[i: i + POSTS_PER_REQUEST]
-        print(f"  获取批次 ({i + 1}-{min(i + POSTS_PER_REQUEST, total_posts)}/{total_posts})")
+        print(i18n.t("e6_batch_progress_indent", start=i + 1,
+                     end=min(i + POSTS_PER_REQUEST, total_posts), total=total_posts))
         try:
             posts = fetch_posts_batch(batch_ids)
         except requests.RequestException as e:
-            print(f"  批次请求失败: {e}，等待 5 秒后重试...")
+            print(i18n.t("e6_batch_failed_retry_indent", e=e))
             time.sleep(5)
             try:
                 posts = fetch_posts_batch(batch_ids)
             except requests.RequestException as e2:
-                print(f"  重试仍失败: {e2}，跳过该批次")
+                print(i18n.t("e6_batch_retry_failed_indent", e=e2))
                 continue
 
         for post in posts:
@@ -216,12 +219,13 @@ def main():
                 failed_ids.append(pid)
         time.sleep(REQUEST_DELAY)
 
-    print(f"可下载作品: {len(downloadable)}")
+    print(i18n.t("e6_downloadable_count", n=len(downloadable)))
     if failed_ids:
-        print(f"无文件 URL 的作品: {len(failed_ids)} (ID: {', '.join(map(str, failed_ids))})")
+        print(i18n.t("e6_no_url_posts", n=len(failed_ids),
+                     ids=", ".join(map(str, failed_ids))))
 
     if not downloadable:
-        print("没有可下载的作品，退出。")
+        print(i18n.t("e6_nothing_to_download"))
         return
 
     # 3. 断点续传准备（反转模式）
@@ -237,9 +241,9 @@ def main():
     total_to_download = len(downloadable)
 
     if existing_max > 0:
-        print(f"检测到已有 {existing_max} 个文件，从序号 {start_index} 开始续传（反转顺序）")
+        print(i18n.t("e6_resume_reverse", n=existing_max, start=start_index))
     else:
-        print(f"开始下载，图片将按 Pool 反转顺序编号：最后一张 → 1.jpg, 倒数第二张 → 2.png ...")
+        print(i18n.t("e6_start_reverse"))
 
     # 4. 反向遍历下载
     downloaded = 0
@@ -264,12 +268,14 @@ def main():
         filepath = output_dir / filename
 
         if filepath.exists():
-            print(f"[{target_index}/{total_to_download}] 作品 #{pid} -> {filename} 已存在，跳过")
+            print(i18n.t("e6_post_skip", idx=target_index, total=total_to_download,
+                         pid=pid, name=filename))
             skipped += 1
             processed_count += 1
             continue
 
-        print(f"[{target_index}/{total_to_download}] 下载作品 #{pid} -> {filename}")
+        print(i18n.t("e6_post_download", idx=target_index, total=total_to_download,
+                     pid=pid, name=filename))
         try:
             with session.get(url, stream=True) as r:
                 r.raise_for_status()
@@ -279,7 +285,7 @@ def main():
             os.utime(filepath, None)
             downloaded += 1
         except requests.RequestException as e:
-            print(f"  下载失败: {e}")
+            print(i18n.t("e6_download_failed_indent", e=e))
             download_failed.append(pid)
             if filepath.exists():
                 filepath.unlink()
@@ -291,19 +297,21 @@ def main():
         time.sleep(REQUEST_DELAY)
 
     # 5. 汇总
-    print("\n===== 下载完成 =====")
-    print(f"Pool: {pool_name} (ID: {pool_id})")
-    print(f"总计作品: {total_posts}")
-    print(f"可下载作品: {total_to_download}")
-    print(f"成功下载: {downloaded}")
-    print(f"已存在跳过: {skipped}")
+    print(i18n.t("e6_done_header"))
+    print(i18n.t("e6_pool_id_line", name=pool_name, id=pool_id))
+    print(i18n.t("e6_total_posts", n=total_posts))
+    print(i18n.t("e6_downloadable_count", n=total_to_download))
+    print(i18n.t("e6_downloaded_count", n=downloaded))
+    print(i18n.t("e6_skipped_count", n=skipped))
     if download_failed:
-        print(f"下载失败: {len(download_failed)} (ID: {', '.join(map(str, download_failed))})")
+        print(i18n.t("e6_failed_with_ids", n=len(download_failed),
+                     ids=", ".join(map(str, download_failed))))
     if failed_ids:
-        print(f"无可用 URL: {len(failed_ids)} (ID: {', '.join(map(str, failed_ids))})")
-    print(f"文件保存至: {output_dir.resolve()}")
+        print(i18n.t("e6_no_url_with_ids", n=len(failed_ids),
+                     ids=", ".join(map(str, failed_ids))))
+    print(i18n.t("e6_saved_to", path=output_dir.resolve()))
     if existing_max > 0:
-        print("提示：反转编号续传时，已保证序号连续。若手动删除中间文件可能导致重复，建议清空目录后重试。")
+        print(i18n.t("e6_reverse_resume_tip"))
 
 
 if __name__ == "__main__":

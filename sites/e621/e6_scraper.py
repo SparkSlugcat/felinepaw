@@ -26,6 +26,8 @@ for _p in (os.path.dirname(os.path.dirname(_here)), os.path.dirname(_here), _her
         sys.path.insert(0, _p)
         break
 import common
+# i18n 词条表与 common.py 同在项目根，上面的 sys.path 已把它放好
+import i18n
 
 # ---------- 配置 ----------
 HEADERS = {
@@ -52,9 +54,9 @@ def create_session(proxy=None):
     session = common.create_session(proxy, HEADERS)
     if API_USER and API_KEY:
         session.auth = (API_USER, API_KEY)
-        print("已使用认证信息登录")
+        print(i18n.t("e6_logged_in"))
     else:
-        print("以游客身份访问")
+        print(i18n.t("e6_guest_mode"))
     return session
 
 
@@ -81,7 +83,7 @@ def fetch_all_post_ids(tags: str, limit: int = None) -> list[int]:
                 break
             for post in posts:
                 all_ids.append(post["id"])
-            print(f"  第 {page} 页，获取到 {len(posts)} 个帖子（累计 {len(all_ids)}）")
+            print(i18n.t("e6_page_fetched", page=page, got=len(posts), total=len(all_ids)))
 
             if limit is not None:          # 指定了 limit，只取一页
                 break
@@ -90,11 +92,11 @@ def fetch_all_post_ids(tags: str, limit: int = None) -> list[int]:
             page += 1
             time.sleep(REQUEST_DELAY)
         except requests.exceptions.JSONDecodeError:
-            print(f"    响应不是 JSON，前200字节: {resp.content[:200]}")
+            print(i18n.t("e6_not_json", body=resp.content[:200]))
             break
         except requests.RequestException as e:
-            print(f"获取帖子列表失败（第 {page} 页）: {e}")
-            print("等待 5 秒后重试...")
+            print(i18n.t("e6_list_failed_page", page=page, e=e))
+            print(i18n.t("e6_wait_retry"))
             time.sleep(5)
             continue
     return all_ids
@@ -141,27 +143,27 @@ def sanitize_filename(name: str) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="下载 e621/e926 指定 tags 的所有图片")
-    parser.add_argument("--tags", required=True, help="搜索标签，例如 aubrey_(iceink)")
-    parser.add_argument("--limit", type=int, default=None, help="只下载前 N 个帖子") ;  parser.add_argument("-o", "--output", default=None, help="图片保存目录（默认为 tags 名称）")
+    parser = argparse.ArgumentParser(description=i18n.t("e6_tags_desc"))
+    parser.add_argument("--tags", required=True, help=i18n.t("e6_tags_help"))
+    parser.add_argument("--limit", type=int, default=None, help=i18n.t("e6_limit_help")) ;  parser.add_argument("-o", "--output", default=None, help=i18n.t("e6_output_help_tags"))
     args = parser.parse_args()
 
     tags = args.tags.strip()
-    print(f"搜索标签: {tags}")
+    print(i18n.t("e6_search_tags", tags=tags))
 
     # 1. 获取所有帖子 ID
-    print("正在获取帖子 ID 列表（可能多页）...")
+    print(i18n.t("e6_id_list_fetching_paged"))
     try:
         all_ids = fetch_all_post_ids(tags, limit=args.limit)
     except Exception as e:
-        print(f"获取 ID 列表失败: {e}")
+        print(i18n.t("e6_id_list_failed", e=e))
         sys.exit(1)
 
     if not all_ids:
-        print("没有找到匹配的帖子。")
+        print(i18n.t("e6_no_posts_found"))
         return
 
-    print(f"共找到 {len(all_ids)} 个帖子")
+    print(i18n.t("e6_total_found", n=len(all_ids)))
 
     # 确定输出目录
     if args.output:
@@ -175,19 +177,20 @@ def main():
     downloadable = []   # (post_id, url, ext)
     failed_ids = []
 
-    print("正在获取帖子详细信息...")
+    print(i18n.t("e6_posts_detail_fetching"))
     for i in range(0, len(all_ids), POSTS_PER_REQUEST):
         batch_ids = all_ids[i:i + POSTS_PER_REQUEST]
-        print(f"  批次 {i//POSTS_PER_REQUEST + 1} ({i+1}-{min(i+POSTS_PER_REQUEST, len(all_ids))}/{len(all_ids)})")
+        print(i18n.t("e6_batch_n", n=i//POSTS_PER_REQUEST + 1, start=i+1,
+                     end=min(i+POSTS_PER_REQUEST, len(all_ids)), total=len(all_ids)))
         try:
             posts = fetch_posts_batch(batch_ids)
         except requests.RequestException as e:
-            print(f"批次请求失败: {e}，等待 5 秒重试...")
+            print(i18n.t("e6_batch_failed_retry", e=e))
             time.sleep(5)
             try:
                 posts = fetch_posts_batch(batch_ids)
             except requests.RequestException as e2:
-                print(f"重试仍失败: {e2}，跳过该批次")
+                print(i18n.t("e6_batch_retry_failed", e=e2))
                 continue
 
         for post in posts:
@@ -199,9 +202,9 @@ def main():
                 failed_ids.append(pid)
         time.sleep(REQUEST_DELAY)
 
-    print(f"可下载: {len(downloadable)}, 无URL: {len(failed_ids)}")
+    print(i18n.t("e6_downloadable_and_missing_short", ok=len(downloadable), bad=len(failed_ids)))
     if not downloadable:
-        print("没有可下载的图片。")
+        print(i18n.t("e6_no_images"))
         return
 
     # 3. 断点续传准备（与 Pool 爬虫相同）
@@ -213,7 +216,7 @@ def main():
                 existing_max = num
     start_index = existing_max + 1
     if existing_max > 0:
-        print(f"检测到已有 {existing_max} 个文件，从序号 {start_index} 继续下载")
+        print(i18n.t("e6_resume_from", n=existing_max, start=start_index))
 
     # 4. 下载
     downloaded = 0
@@ -229,11 +232,13 @@ def main():
         filepath = output_dir / filename
 
         if filepath.exists():
-            print(f"[{target_index}] #{pid} -> {filename} 已存在，跳过")
+            print(i18n.t("e6_post_skip_plain", idx=target_index,
+                         pid=pid, name=filename))
             skipped += 1
             continue
 
-        print(f"[{target_index}/{len(downloadable)}] 下载 #{pid} -> {filename}")
+        print(i18n.t("e6_post_download_plain", idx=target_index, total=len(downloadable),
+                     pid=pid, name=filename))
         try:
             with session.get(url, stream=True) as r:
                 r.raise_for_status()
@@ -243,23 +248,25 @@ def main():
             os.utime(filepath, None)
             downloaded += 1
         except requests.RequestException as e:
-            print(f"  下载失败: {e}")
+            print(i18n.t("e6_download_failed_indent", e=e))
             download_failed.append(pid)
             if filepath.exists():
                 filepath.unlink()
         time.sleep(REQUEST_DELAY)
 
     # 5. 汇总
-    print("\n===== 下载完成 =====")
-    print(f"标签: {tags}")
-    print(f"总计帖子: {len(all_ids)}")
-    print(f"成功下载: {downloaded}")
-    print(f"已存在跳过: {skipped}")
+    print(i18n.t("e6_done_header"))
+    print(i18n.t("e6_tags_line", tags=tags))
+    print(i18n.t("e6_total_posts_tags", n=len(all_ids)))
+    print(i18n.t("e6_downloaded_count", n=downloaded))
+    print(i18n.t("e6_skipped_count", n=skipped))
     if download_failed:
-        print(f"下载失败: {len(download_failed)} (ID: {', '.join(map(str, download_failed))})")
+        print(i18n.t("e6_failed_with_ids", n=len(download_failed),
+                     ids=", ".join(map(str, download_failed))))
     if failed_ids:
-        print(f"无可用 URL: {len(failed_ids)} (ID: {', '.join(map(str, failed_ids))})")
-    print(f"文件保存至: {output_dir.resolve()}")
+        print(i18n.t("e6_no_url_with_ids", n=len(failed_ids),
+                     ids=", ".join(map(str, failed_ids))))
+    print(i18n.t("e6_saved_to", path=output_dir.resolve()))
 
 
 if __name__ == "__main__":

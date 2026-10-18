@@ -48,6 +48,8 @@ for _p in (os.path.dirname(os.path.dirname(_here)), os.path.dirname(_here), _her
         sys.path.insert(0, _p)
         break
 import common
+# i18n 词条表与 common.py 同在项目根，上面的 sys.path 已把它放好
+import i18n
 sanitize_filename = common.sanitize_filename
 parse_limit = common.parse_limit
 
@@ -324,31 +326,31 @@ def download_images(tasks, download_dir, adult_flag, threads=8, retries=2, proxy
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="从 hypnohub.net 按标签批量下载原图（HTML only，不支持 JSON API）")
+        description=i18n.t("hy_desc"))
     parser.add_argument("--tags", required=True,
-                        help="标签，多个用空格分开，如 'cute fox' 或 landscape")
+                        help=i18n.t("hy_help_tags"))
     parser.add_argument("--limit", default=None,
-                        help="下载数量: 正整数 或 inf(全部)；不填默认只下载前 120 个")
+                        help=i18n.t("hy_help_limit"))
     parser.add_argument("--adult", choices=['y', 'n'], default='y',
-                        help="是否包含成人内容（y=是，n=否），默认 y。n 时原图会被站点隐藏")
+                        help=i18n.t("hy_help_adult"))
     parser.add_argument("--name", default=None,
-                        help="自定义下载文件夹名称，默认与 --tags 相同")
+                        help=i18n.t("hy_help_name"))
     parser.add_argument("-o", "--o", "--output", dest="output_dir", default='.',
-                        help="输出根目录，默认为当前目录")
+                        help=i18n.t("hy_help_output"))
     parser.add_argument("--threads", type=int, default=8,
-                        help="并发线程数（翻页+下载），默认 8")
+                        help=i18n.t("hy_help_threads"))
     parser.add_argument("--retry", type=int, default=2,
-                        help="单个任务失败重试次数，默认 2")
+                        help=i18n.t("hy_help_retry"))
     parser.add_argument("--force", action="store_true",
-                        help="重新下载已存在的图片（默认跳过；用于修复下到一半的坏文件）")
+                        help=i18n.t("hy_help_force"))
     common.add_pacing_args(parser)
     common.add_preflight_args(parser)
     parser.add_argument("--proxy", default=None,
-                        help="代理: 留空=自动检测, off=直连, 或 http://127.0.0.1:7897")
+                        help=i18n.t("hy_help_proxy"))
     parser.add_argument("--dry-run", action="store_true",
-                        help="只收集列表，不下载（用于测试翻页）")
+                        help=i18n.t("hy_help_dry_run"))
     parser.add_argument("--page", type=int, default=None,
-                        help="指定只下载某一页（从 1 开始）")
+                        help=i18n.t("hy_help_page"))
     return parser.parse_args()
 
 

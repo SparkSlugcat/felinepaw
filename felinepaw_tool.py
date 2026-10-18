@@ -34,6 +34,7 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 import common  # noqa: E402
+import i18n  # noqa: E402
 
 # 站点 -> (默认脚本, 支持的通用参数, 需要的位置参数帮助)
 E621_SCRIPTS = {
@@ -74,31 +75,31 @@ def build_command(site: str, args) -> list:
 
     if site in ("e621", "e926"):
         if not args.mode:
-            raise ValueError(f"{site} 需要 --mode: tags/page/artist/pool/pool-rev")
+            raise ValueError(i18n.t("tool_err_need_mode", site=site))
         script = E621_SCRIPTS[args.mode]
         if args.mode in ("tags", "page", "artist"):
             if args.mode == "artist":
                 # 艺术家模式支持 --from-manifest（从名单挑着下），此时可不给 --tags
                 if not (args.tags or args.from_manifest):
-                    raise ValueError("艺术家模式需要 --tags <标签> 或 --from-manifest <名单>")
+                    raise ValueError(i18n.t("tool_err_artist_need"))
                 if args.tags:
                     pos_args += ["--tags", args.tags]
                 if args.skip_others:
                     pos_args += ["--skip-others"]
             else:
                 if not args.tags:
-                    raise ValueError("该模式需要 --tags")
+                    raise ValueError(i18n.t("tool_err_mode_need_tags"))
                 pos_args += ["--tags", args.tags]
                 if args.mode == "page" and args.page:
                     pos_args += ["--page", str(args.page)]
         else:
             if not args.target:
-                raise ValueError("该模式需要 Pool URL，例如: e621 pool https://e621.net/pools/123")
+                raise ValueError(i18n.t("tool_err_need_pool_url"))
             pos_args += [args.target]
 
     elif site == "yiff":
         if not args.target:
-            raise ValueError("yiff 需要标签，例如: yiff feline")
+            raise ValueError(i18n.t("tool_err_yiff_need"))
         if args.auto:
             script = "yiff_auto_scraper.py"
             pos_args += [args.target]
@@ -114,18 +115,18 @@ def build_command(site: str, args) -> list:
             pos_args += [args.target]                  # 单画廊
         # --from-manifest / --manifest / --pick / --pages 由下面的白名单透传处理
         if not (args.tags or args.target or args.from_manifest):
-            raise ValueError("ehentai 需要画廊 URL、--tags <标签> 或 --from-manifest <名单>")
+            raise ValueError(i18n.t("tool_err_ehentai_need"))
 
     elif site == "fa":
         if not args.target:
-            raise ValueError("fa 需要作品 URL")
+            raise ValueError(i18n.t("tool_err_fa_need"))
         script = "FA_scraper.py"
         pos_args += [args.target]
 
     elif site == "bbooru":
         script = "B_scraper.py"
         if args.tags and args.pool:
-            raise ValueError("bbooru 的 --tags 与 --pool 只能二选一")
+            raise ValueError(i18n.t("tool_err_bbooru_exclusive"))
         if args.pool:
             pos_args += ["--pool", args.pool]          # 合集：show 页 URL 或纯 id
             if args.pool_rev:
@@ -141,14 +142,14 @@ def build_command(site: str, args) -> list:
             if args.force_pool_check:
                 pos_args += ["--force-pool-check"]
         else:
-            raise ValueError("bbooru 需要 --tags <标签> 或 --pool <show页URL/id>")
+            raise ValueError(i18n.t("tool_err_bbooru_need"))
         # bbooru 的并发参数是 --threads，把通用 -w 映射过去
         if args.workers:
             pos_args += ["--threads", str(args.workers)]
 
     elif site == "wilddream":
         if not args.target:
-            raise ValueError("wilddream 需要画廊 URL（目标框）")
+            raise ValueError(i18n.t("tool_err_wilddream_need"))
         script = "W_scraper.py"
         pos_args += [args.target]
         # wilddream 的并发参数是 --threads，把通用 -w 映射过去
@@ -157,7 +158,7 @@ def build_command(site: str, args) -> list:
 
     elif site == "hypnohub":
         if not args.tags:
-            raise ValueError("hypnohub 需要 --tags <标签>")
+            raise ValueError(i18n.t("tool_err_hypnohub_need"))
         script = "H_scraper.py"
         pos_args += ["--tags", args.tags]
         if args.page is not None:
@@ -168,7 +169,7 @@ def build_command(site: str, args) -> list:
 
     elif site == "rule34us":
         if not args.tags:
-            raise ValueError("rule34us 需要 --tags <标签>")
+            raise ValueError(i18n.t("tool_err_rule34us_need"))
         script = "R_scraper.py"
         pos_args += ["--tags", args.tags]
         if args.page is not None:
@@ -178,7 +179,7 @@ def build_command(site: str, args) -> list:
             pos_args += ["--threads", str(args.workers)]
 
     else:
-        raise ValueError(f"未知站点: {site}（可用: e621/e926/yiff/ehentai/fa/bbooru/wilddream/hypnohub/rule34us）")
+        raise ValueError(i18n.t("tool_err_unknown_site", site=site))
 
     # ⚠️ 站点名 -> 目录名。不要想当然：目录用的是**带连字符/全称**的写法
     #    （sites/e-hentai/、sites/furaffinity/），漏掉的会拼出不存在的路径。
@@ -198,7 +199,7 @@ def build_command(site: str, args) -> list:
                 else:
                     cmd.extend([flag, str(value)])
             else:
-                print(f"⚠️ 警告: 目标脚本 {script} 不支持 {flag}，该参数已忽略", file=sys.stderr)
+                print(i18n.t("tool_warn_unsupported", script=script, flag=flag), file=sys.stderr)
     _add("-o", args.output or str(common.local_out_root()))
     _add("--limit", args.limit)
     _add("--proxy", args.proxy)
@@ -227,68 +228,66 @@ def build_command(site: str, args) -> list:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="felinepaw 一体化工具：统一调度 e621/yiff/e-hentai/furaffinity/bbooru/wilddream 脚本")
+    parser = argparse.ArgumentParser(description=i18n.t("tool_desc"))
     parser.add_argument("site",
                         choices=["e621", "e926", "yiff", "ehentai", "fa", "bbooru", "wilddream", "hypnohub", "rule34us"],
-                        help="站点（e926 为 e621 安全版；bbooru 用 --tags/--pool；wilddream 用画廊 URL；hypnohub/rule34us 用 --tags）")
+                        help=i18n.t("tool_help_site"))
     # e621 模式（也是 bbooru 模式选择）
     parser.add_argument("--mode", choices=["tags", "page", "artist", "pool", "pool-rev", "auto", "api", "html"],
-                        help="e621/bbooru 下载模式（bbooru: auto/api/html/artist）")
-    parser.add_argument("--tags", help="标签（e621/bbooru 用）")
+                        help=i18n.t("tool_help_mode"))
+    parser.add_argument("--tags", help=i18n.t("tool_help_tags"))
     parser.add_argument("--pool", default=None,
-                        help="bbooru 合集：pool show 页 URL 或纯 id（与 --tags 二选一）")
+                        help=i18n.t("tool_help_pool"))
     parser.add_argument("--page", type=int,
-                        help="页码（e621 page 模式 / bbooru / hypnohub / rule34us）")
+                        help=i18n.t("tool_help_page"))
     parser.add_argument("--skip-others", action="store_true",
-                        help="艺术家模式跳过非池作品（e621 / bbooru）")
-    parser.add_argument("--pool-rev", action="store_true", help="pool 反转编号（bbooru）")
+                        help=i18n.t("tool_help_skip_others"))
+    parser.add_argument("--pool-rev", action="store_true", help=i18n.t("tool_help_pool_rev"))
     parser.add_argument("--force-pool-check", action="store_true",
-                        help="bbooru artist 模式：全量查询每个帖子的 pool 归属（默认只查前 10 个）")
+                        help=i18n.t("tool_help_force_pool_check"))
     parser.add_argument("target", nargs="?",
-                        help="目标：yiff=标签；pool/ehentai/fa=URL；wilddream=画廊 URL")
+                        help=i18n.t("tool_help_target"))
     # 通用
-    parser.add_argument("-o", "--output", default=None, help="保存目录")
-    parser.add_argument("--limit", default=None, help="下载数量: 数字或 inf")
-    parser.add_argument("--proxy", default=None, help="代理: 留空自动/off/URL")
-    parser.add_argument("-w", "--workers", type=int, default=None, help="并发线程数")
+    parser.add_argument("-o", "--output", default=None, help=i18n.t("tool_help_output"))
+    parser.add_argument("--limit", default=None, help=i18n.t("tool_help_limit"))
+    parser.add_argument("--proxy", default=None, help=i18n.t("tool_help_proxy"))
+    parser.add_argument("-w", "--workers", type=int, default=None, help=i18n.t("tool_help_workers"))
     parser.add_argument("-d", "--delay", type=float, default=None,
-                        help="请求间隔秒：EH/FA 为随机延时上限；bbooru/hypnohub/rule34us 为基准延时")
+                        help=i18n.t("tool_help_delay"))
     parser.add_argument("--jitter", type=float, default=None,
-                        help="在 --delay 基础上叠加的随机抖动秒数（bbooru/hypnohub/rule34us）")
+                        help=i18n.t("tool_help_jitter"))
     parser.add_argument("--cooldown", type=float, default=None,
-                        help="被限流(429/503)时全部线程一起安静多少秒，默认 20（bbooru/hypnohub/rule34us）")
+                        help=i18n.t("tool_help_cooldown"))
     parser.add_argument("--force", action="store_true",
-                        help="重新下载已存在的图片（bbooru/hypnohub/rule34us/ehentai；默认跳过）")
+                        help=i18n.t("tool_help_force"))
     parser.add_argument("--no-preflight", action="store_true",
-                        help="跳过发包前的代理预检（bbooru/hypnohub/rule34us/ehentai）")
+                        help=i18n.t("tool_help_no_preflight"))
     parser.add_argument("--dry-run", action="store_true",
-                        help="只拉名单不下载（e621 artist/bbooru/hypnohub/rule34us/ehentai）")
+                        help=i18n.t("tool_help_dry_run"))
     parser.add_argument("--pick", default=None,
-                        help="按名单序号挑着下，如 2-4,7（e621 artist/ehentai；编号 = dry-run 看到的 #）")
+                        help=i18n.t("tool_help_pick"))
     parser.add_argument("--pages", default=None,
-                        help="ehentai 搜索模式：每个画廊最多下 N 张图（默认全部）")
+                        help=i18n.t("tool_help_pages"))
     parser.add_argument("--from-manifest", default=None, metavar="FILE",
-                        help="e621 artist/ehentai：读 dry-run 存的名单文件，跳过搜索（配合 --pick 精确复现）")
+                        help=i18n.t("tool_help_from_manifest"))
     parser.add_argument("--manifest", default=None,
-                        help="e621 artist/ehentai：dry-run 保存名单的文件名"
-                             "（e621 默认 e6_artist_manifest.json，ehentai 默认 eh_manifest.json）")
-    parser.add_argument("--cookies", default=None, help="FA cookies 文件")
+                        help=i18n.t("tool_help_manifest"))
+    parser.add_argument("--cookies", default=None, help=i18n.t("tool_help_cookies"))
     # yiff 自动版
-    parser.add_argument("--auto", action="store_true", help="yiff 用浏览器滚动版")
-    parser.add_argument("--max-pages", type=int, default=None, help="yiff 自动版最大滚动轮数")
-    parser.add_argument("--headless", action="store_true", help="yiff 自动版无头模式")
+    parser.add_argument("--auto", action="store_true", help=i18n.t("tool_help_auto"))
+    parser.add_argument("--max-pages", type=int, default=None, help=i18n.t("tool_help_max_pages"))
+    parser.add_argument("--headless", action="store_true", help=i18n.t("tool_help_headless"))
     args = parser.parse_args()
 
     if args.site == "e926":
-        print("e926 暂不可用：该站被 Cloudflare 人机挑战拦截，纯 requests 无法访问。")
-        print("请改用 e621，或用浏览器访问 e926。后续若实现浏览器模式再恢复支持。")
+        print(i18n.t("tool_e926_unavailable"))
+        print(i18n.t("tool_e926_hint"))
         sys.exit(1)
 
     try:
         cmd = build_command(args.site, args)
     except ValueError as e:
-        print(f"参数错误: {e}")
+        print(i18n.t("tool_param_error", e=e))
         parser.print_help()
         sys.exit(2)
 
@@ -302,7 +301,7 @@ def main():
         proc.wait()
     except KeyboardInterrupt:
         proc.terminate()
-        print("\n已终止。")
+        print(i18n.t("tool_interrupted"))
     sys.exit(proc.returncode)
 
 

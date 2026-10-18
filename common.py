@@ -28,6 +28,8 @@ import time
 from pathlib import Path
 from typing import Optional, Tuple
 
+import i18n   # 公共库里的用户提示也要双语（i18n.py 与它同在项目根，调用方已把根加进 sys.path）
+
 import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
@@ -164,10 +166,10 @@ def parse_limit(limit_str, total: int):
     try:
         n = int(s)
     except ValueError:
-        print("--limit 需要是正整数或 inf。")
+        print(i18n.t("common_limit_invalid"))
         return None
     if n <= 0:
-        print("--limit 需要是正整数或 inf。")
+        print(i18n.t("common_limit_invalid"))
         return None
     return n
 
@@ -192,7 +194,7 @@ def parse_pick(spec, total: int):
     if s in ("all", "*"):
         return list(range(1, total + 1))
     if not s:
-        print("--pick 是空的。写成 2-4,7 这样的序号（或 all）。")
+        print(i18n.t("common_pick_empty"))
         return None
 
     picked = set()
@@ -204,31 +206,31 @@ def parse_pick(spec, total: int):
         if m:
             a, b = m.group(1), m.group(2)
             if not a and not b:              # 光一个 "-"
-                print("--pick 里的 '-' 两边至少要有一个数字：%r" % part)
+                print(i18n.t("common_pick_dash", part=part))
                 return None
             start = int(a) if a else 1
             end = int(b) if b else total
             if start > end:
-                print("--pick 的区间写反了（%s > %s）：%r" % (start, end, part))
+                print(i18n.t("common_pick_reversed", start=start, end=end, part=part))
                 return None
             picked.update(range(start, end + 1))
         elif part.isdigit():
             picked.add(int(part))
         else:
-            print("--pick 看不懂这一段：%r（支持 2-4,7 / 3- / -3 / all）" % part)
+            print(i18n.t("common_pick_bad", part=part))
             return None
 
     keep = sorted(i for i in picked if 1 <= i <= total)
     dropped = sorted(i for i in picked if i not in keep)
     if dropped:
         if len(dropped) > 5:
-            print("--pick 里有超出范围的序号已忽略：%d 个（%d~%d 等，当前名单只有 %d 个）"
-                  % (len(dropped), dropped[0], dropped[-1], total))
+            print(i18n.t("common_pick_oob_n", n=len(dropped), first=dropped[0],
+                         last=dropped[-1], total=total))
         else:
-            print("--pick 里有超出范围的序号已忽略：%s（当前名单只有 %d 个）"
-                  % (", ".join(str(i) for i in dropped), total))
+            print(i18n.t("common_pick_oob_list",
+                         ids=", ".join(str(i) for i in dropped), total=total))
     if not keep:
-        print("--pick 挑完之后一个都不剩。")
+        print(i18n.t("common_pick_none_left"))
         return None
     return keep
 
@@ -311,20 +313,17 @@ def make_pacing(args) -> Pacing:
 def add_pacing_args(parser) -> None:
     """给站点 parser 注册统一的节流参数（--delay / --jitter / --cooldown）。"""
     parser.add_argument("--delay", type=float, default=0.0,
-                        help="每次请求前的基准延时秒数，默认 0（不限速）。"
-                             "被站点限流时试试 --delay 1.0")
+                        help=i18n.t("common_help_delay"))
     parser.add_argument("--jitter", type=float, default=0.0,
-                        help="在基准延时上叠加的随机抖动秒数，默认 0。"
-                             "配合 --delay 用（如 --delay 1 --jitter 1.5）让节奏不像机器")
+                        help=i18n.t("common_help_jitter"))
     parser.add_argument("--cooldown", type=float, default=20.0,
-                        help="吃到 429/503 时让所有线程一起安静多少秒，默认 20")
+                        help=i18n.t("common_help_cooldown"))
 
 
 def add_preflight_args(parser) -> None:
     """给站点 parser 注册 `--no-preflight`（跳过发包前的链路预检）。"""
     parser.add_argument("--no-preflight", action="store_true",
-                        help="跳过发包前的代理预检（默认会先花约 1 秒确认链路，"
-                             "失败时能立刻说清是 Clash 没开还是节点问题）")
+                        help=i18n.t("common_help_no_preflight"))
 
 
 # ============================================================

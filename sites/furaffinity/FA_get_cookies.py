@@ -29,6 +29,14 @@ from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
 _ENV = _HERE.parent / "_dsp_env"          # 备用依赖目录（如存在）
+
+# ---- 定位项目根目录（felinepaw/）并导入 i18n，供下面的提示语使用 ----
+for _p in (_HERE.parent.parent, _HERE.parent, _HERE):
+    if (_p / "i18n.py").exists():
+        sys.path.insert(0, str(_p))
+        break
+import i18n
+
 try:
     from DrissionPage import ChromiumOptions, ChromiumPage
 except ImportError:
@@ -36,11 +44,11 @@ except ImportError:
         sys.path.insert(0, str(_ENV))
         from DrissionPage import ChromiumOptions, ChromiumPage
     else:
-        print("未找到 DrissionPage。请先激活 py39 环境：conda activate py39")
+        print(i18n.t("fa_err_no_drissionpage"))
         sys.exit(1)
 
 
-def input_password(prompt: str = "FA 密码: ") -> str:
+def input_password(prompt: str = i18n.t("fa_prompt_password")) -> str:
     """密码输入：每键显示一个 *，退格可修改（Windows 用 msvcrt）。"""
     if sys.platform != "win32":
         import getpass
@@ -71,8 +79,8 @@ def input_password(prompt: str = "FA 密码: ") -> str:
 
 
 def main():
-    username = input("FA 用户名: ").strip()
-    password = input_password("FA 密码: ")
+    username = input(i18n.t("fa_prompt_username")).strip()
+    password = input_password(i18n.t("fa_prompt_password"))
 
     co = ChromiumOptions()
     co.set_argument("--no-sandbox")
@@ -83,7 +91,7 @@ def main():
     elif Path(chrome).exists():
         co.set_browser_path(chrome)
 
-    print("正在打开浏览器（请勿关闭窗口）...")
+    print(i18n.t("fa_opening_browser"))
     page = ChromiumPage(co)
     try:
         page.get("https://www.furaffinity.net/login/")
@@ -95,11 +103,11 @@ def main():
             name_box.input(username)
             pass_box = page.ele('xpath://input[@name="pass"]', timeout=5)
             pass_box.input(password)
-            print("已自动填写账号密码。")
+            print(i18n.t("fa_autofill_ok"))
         except Exception as e:
-            print(f"自动填写失败（{e}），请手动填写并点击登录。")
+            print(i18n.t("fa_autofill_failed", e=e))
 
-        print("若出现验证码/人机验证，请在本窗口手动完成；登录后脚本会自动保存 cookies ...")
+        print(i18n.t("fa_captcha_hint"))
         # 点击登录按钮（若可点击）
         try:
             btn = page.ele('xpath://input[@name="login"]', timeout=3)
@@ -126,10 +134,10 @@ def main():
             except Exception:
                 continue
             if i % 15 == 0:
-                print(f"  等待登录完成... ({i * 2}s)")
+                print(i18n.t("fa_waiting_login", sec=i * 2))
 
         if not logged_in:
-            print("等待超时：未能确认登录成功，cookies 未导出。")
+            print(i18n.t("fa_login_timeout"))
             sys.exit(1)
 
         # 导出 cookies（DrissionPage -> JSON）
@@ -137,8 +145,8 @@ def main():
         out = _HERE / "fa_cookies.json"
         with open(out, "w", encoding="utf-8") as f:
             json.dump(cookies, f, ensure_ascii=False, indent=2)
-        print(f"\ncookies 已保存到: {out}")
-        print(f"共 {len(cookies)} 条。之后运行: python FA_scraper.py URL --cookies fa_cookies.json")
+        print(i18n.t("fa_cookies_saved", path=out))
+        print(i18n.t("fa_cookies_next_hint", n=len(cookies)))
     finally:
         try:
             page.quit()

@@ -62,6 +62,7 @@ for _p in (os.path.dirname(os.path.dirname(_here)), os.path.dirname(_here), _her
         sys.path.insert(0, _p)
         break
 import common
+import i18n
 # 共享函数别名
 create_session = common.create_session
 sanitize_filename = common.sanitize_filename
@@ -72,7 +73,7 @@ parse_limit = common.parse_limit
 # 登录
 # ============================================================
 
-def input_password(prompt: str = "FA 密码: ") -> str:
+def input_password(prompt: str = i18n.t("fa_prompt_password")) -> str:
     """输入密码：每个字符显示为 *，便于发现输错后修改；回车确认。
 
     Windows 下用 msvcrt 逐键读取并回显 *（支持退格修改）；
@@ -112,7 +113,7 @@ def login(session: requests.Session, username: str, password: str) -> bool:
     （返回 /login/?msg=3）。遇到验证码时请改用 --cookies 模式：
     先运行 FA_get_cookies.py 导出 fa_cookies.json。
     """
-    print("正在登录 furaffinity.net ...")
+    print(i18n.t("fa_logging_in"))
     try:
         r = session.get(SITE + "/login/", timeout=20)
         r.raise_for_status()
@@ -124,27 +125,27 @@ def login(session: requests.Session, username: str, password: str) -> bool:
                           allow_redirects=False)
         loc = r2.headers.get("Location", "")
         if "msg=" in loc or r2.status_code not in (302, 200):
-            print("登录被拒（FA 返回错误码）。")
+            print(i18n.t("fa_login_rejected"))
             if has_captcha:
-                print("检测到登录页有验证码：FA 要求真人验证，纯脚本登录无法通过。")
-                print("请改用 cookies 模式：先运行  FA_get_cookies.py  导出 cookies，")
-                print("再用  --cookies fa_cookies.json  参数运行本脚本。")
+                print(i18n.t("fa_login_captcha"))
+                print(i18n.t("fa_login_cookies_hint1"))
+                print(i18n.t("fa_login_cookies_hint2"))
             else:
-                print("账号或密码可能不正确，请检查后重试。")
+                print(i18n.t("fa_login_bad_credentials"))
             return False
         # 302 且无 msg -> 疑似成功，再做一次主页验证
         home = session.get(SITE + "/", timeout=20).text
         low_home = home.lower()
         if f'href="/user/{username.lower()}/"' in low_home:
-            print("登录成功。")
+            print(i18n.t("fa_login_ok"))
             return True
         if re.search(r"welcome\s+back[^<]{0,20}" + re.escape(username.lower()), low_home):
-            print("登录成功。")
+            print(i18n.t("fa_login_ok"))
             return True
-        print("登录状态无法确认（可能仍被验证码拦截），请改用 cookies 模式。")
+        print(i18n.t("fa_login_unconfirmed"))
         return False
     except requests.RequestException as e:
-        print(f"登录请求失败: {e}")
+        print(i18n.t("fa_err_login_request", e=e))
         return False
 
 
@@ -154,7 +155,7 @@ def load_cookies(session: requests.Session, path: str) -> bool:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception as e:
-        print(f"读取 cookies 文件失败: {e}")
+        print(i18n.t("fa_err_cookies_read", e=e))
         return False
     count = 0
     for c in data:
@@ -170,7 +171,7 @@ def load_cookies(session: requests.Session, path: str) -> bool:
             count += 1
         except Exception:
             continue
-    print(f"已加载 {count} 条 cookies（来源: {path}）")
+    print(i18n.t("fa_cookies_loaded", count=count, path=path))
     return count > 0
 
 
@@ -186,7 +187,7 @@ def parse_view_id(url_or_id: str) -> str:
         return m.group(1)
     if s.isdigit():
         return s
-    raise ValueError(f"无法解析作品 ID: {url_or_id}")
+    raise ValueError(i18n.t("fa_err_parse_id", id=url_or_id))
 
 
 def extract_title_from_html(html: str) -> str:
@@ -305,13 +306,14 @@ def crawl_gallery(session: requests.Session, artist: str,
             try:
                 batch = grab(url)
             except requests.RequestException as e:
-                log(f"  抓取 {path} 第 {page + 1} 页失败: {e}")
+                log(i18n.t("fa_err_gallery_page", path=path, page=page + 1, e=e))
                 break
             new = [(v, t) for v, t in batch if v not in seen]
             for v, t in new:
                 seen.add(v)
                 items.append((v, t))
-            log(f"  {path} 第 {page + 1} 页: {len(batch)} 项（累计 {len(items)}）")
+            log(i18n.t("fa_gallery_page", path=path, page=page + 1,
+                       n=len(batch), total=len(items)))
             if len(batch) < 24:          # FA 每页约 24 项
                 break
             page += 1
@@ -388,22 +390,22 @@ def download_submission(session: requests.Session, view_id: str, filepath: Path,
                         log=print) -> bool:
     """下载单个作品（登录态）。"""
     if filepath.exists():
-        log(f"  #{view_id} -> {filepath.name} 已存在，跳过")
+        log(i18n.t("fa_skip_exists", vid=view_id, name=filepath.name))
         return True
     try:
         title, artist, image_url = fetch_view_info(session, view_id)
         if not image_url:
-            log(f"  #{view_id} 未取到图片链接（可能未登录或不是图片）")
+            log(i18n.t("fa_err_no_image", vid=view_id))
             return False
         if image_url.startswith("//"):
             image_url = "https:" + image_url
         ext = Path(urlparse(image_url).path).suffix.lstrip(".") or "jpg"
         if ext.lower() not in ("jpg", "jpeg", "png", "gif", "webp"):
-            log(f"  #{view_id} 非图片类型(.{ext})，跳过")
+            log(i18n.t("fa_skip_not_image", vid=view_id, ext=ext))
             return False
         final = filepath.with_suffix("." + ext)
         if final.exists():
-            log(f"  #{view_id} -> {final.name} 已存在，跳过")
+            log(i18n.t("fa_skip_exists", vid=view_id, name=final.name))
             return True
         with session.get(image_url, stream=True, timeout=30,
                          headers=IMAGE_HEADERS) as r:
@@ -413,11 +415,11 @@ def download_submission(session: requests.Session, view_id: str, filepath: Path,
                     f.write(chunk)
         if final.stat().st_size == 0:
             final.unlink()
-            raise RuntimeError("空文件")
-        log(f"  #{view_id} -> {final.name} 完成")
+            raise RuntimeError(i18n.t("fa_err_empty_file"))
+        log(i18n.t("fa_done", vid=view_id, name=final.name))
         return True
     except Exception as e:
-        log(f"  #{view_id} 下载失败: {e}")
+        log(i18n.t("fa_err_download", vid=view_id, e=e))
         if filepath.exists():
             try:
                 filepath.unlink()
@@ -427,23 +429,23 @@ def download_submission(session: requests.Session, view_id: str, filepath: Path,
 
 
 def main():
-    parser = argparse.ArgumentParser(description="FurAffinity 系列作品爬虫（登录+系列识别）")
-    parser.add_argument("url", help="作品 URL，例如 https://www.furaffinity.net/view/65703734/")
-    parser.add_argument("-o", "--output", default=None, help="保存目录（默认用系列名命名）")
-    parser.add_argument("-w", "--workers", type=int, default=4, help="并发线程数（默认4）")
-    parser.add_argument("-d", "--delay", type=float, default=1.0, help="随机延迟上限秒（默认1.0）")
+    parser = argparse.ArgumentParser(description=i18n.t("fa_cli_desc"))
+    parser.add_argument("url", help=i18n.t("fa_help_url"))
+    parser.add_argument("-o", "--output", default=None, help=i18n.t("fa_help_output"))
+    parser.add_argument("-w", "--workers", type=int, default=4, help=i18n.t("fa_help_workers"))
+    parser.add_argument("-d", "--delay", type=float, default=1.0, help=i18n.t("fa_help_delay"))
     parser.add_argument("--limit", default=None,
-                        help="下载数量: 正整数 或 inf(全部)；不填默认只下载前 120 个")
+                        help=i18n.t("fa_help_limit"))
     parser.add_argument("--proxy", default=None,
-                        help="代理: 留空=自动检测, off=直连, 或 http://127.0.0.1:7897")
-    parser.add_argument("--user", default=None, help="FA 用户名（或用环境变量 FA_USERNAME）")
+                        help=i18n.t("fa_help_proxy"))
+    parser.add_argument("--user", default=None, help=i18n.t("fa_help_user"))
     parser.add_argument("--pass", dest="password", default=None,
-                        help="FA 密码（或用环境变量 FA_PASSWORD；不推荐命令行明文）")
+                        help=i18n.t("fa_help_pass"))
     parser.add_argument("--cookies", default=None,
-                        help="cookies 文件（FA_get_cookies.py 导出），登录被验证码拦截时用这个")
+                        help=i18n.t("fa_help_cookies"))
     parser.add_argument("--dry-run", action="store_true",
-                        help="登录并识别系列后打印结果，不下载")
-    parser.add_argument("--just-this", action="store_true", help="只下载这一张，不找系列")
+                        help=i18n.t("fa_help_dry_run"))
+    parser.add_argument("--just-this", action="store_true", help=i18n.t("fa_help_just_this"))
     args = parser.parse_args()
 
     try:
@@ -451,24 +453,24 @@ def main():
     except ValueError as e:
         print(e)
         sys.exit(1)
-    print(f"作品 ID: {view_id}")
+    print(i18n.t("fa_submission_id", id=view_id))
 
     session = create_session(args.proxy)
     if session.proxies:
-        print(f"已启用代理: {list(session.proxies.values())[0]}")
+        print(i18n.t("fa_proxy_enabled", proxy=list(session.proxies.values())[0]))
     else:
-        print("未使用代理（直连）")
+        print(i18n.t("fa_proxy_direct"))
 
     # ---------- 1. 作品信息（游客也能拿到标题） ----------
     try:
         title, artist, _ = fetch_view_info(session, view_id)
     except requests.RequestException as e:
-        print(f"获取作品页失败: {e}")
+        print(i18n.t("fa_err_fetch_page", e=e))
         sys.exit(1)
     if not title:
-        print("无法解析作品标题，请检查 URL。")
+        print(i18n.t("fa_err_no_title"))
         sys.exit(1)
-    print(f"作品: {title}")
+    print(i18n.t("fa_submission_title", title=title))
 
     # ---------- 2. 登录（画廊项标题和图片都需要登录态） ----------
     if args.cookies:
@@ -478,9 +480,9 @@ def main():
         username = args.user or os.environ.get("FA_USERNAME", "")
         password = args.password or os.environ.get("FA_PASSWORD", "")
         if not username:
-            username = input("FA 用户名: ").strip()
+            username = input(i18n.t("fa_prompt_username")).strip()
         if not password:
-            password = input_password("FA 密码: ")
+            password = input_password(i18n.t("fa_prompt_password"))
         if not login(session, username, password):
             sys.exit(1)
 
@@ -490,26 +492,26 @@ def main():
     except requests.RequestException:
         pass
     if not artist:
-        print("无法解析作者，请检查页面结构。")
+        print(i18n.t("fa_err_no_artist"))
         sys.exit(1)
-    print(f"作者: {artist}")
+    print(i18n.t("fa_artist", artist=artist))
 
     # ---------- 3. 系列识别 ----------
     series_key = normalize_title(title, artist)
     if args.just_this:
         series = [(view_id, title, extract_part_number(title))]
     else:
-        print(f"系列名（归一化）: {series_key!r}")
-        print("正在抓取作者画廊以查找同系列作品...")
+        print(i18n.t("fa_series_key", name=series_key))
+        print(i18n.t("fa_crawling_gallery"))
         try:
             items = crawl_gallery(session, artist, include_scraps=True, log=print)
         except requests.RequestException as e:
-            print(f"抓取画廊失败: {e}")
+            print(i18n.t("fa_err_crawl_gallery", e=e))
             sys.exit(1)
         matched = [(v, t, extract_part_number(t)) for v, t in items
                    if normalize_title(t, artist) == series_key]
         if not matched:
-            print("画廊里没有找到同系列的其他作品（可能只有这一张）。")
+            print(i18n.t("fa_no_series_match"))
             matched = [(view_id, title, extract_part_number(title))]
         # 排序：有编号的按编号，无编号的保持画廊顺序
         with_num = sorted([m for m in matched if m[2] > 0], key=lambda m: m[2])
@@ -521,12 +523,12 @@ def main():
                 seen_ids.add(m[0])
                 series.append(m)
 
-    print(f"\n系列共 {len(series)} 张:")
+    print(i18n.t("fa_series_total", n=len(series)))
     for i, (vid, t, num) in enumerate(series, 1):
-        print(f"  {i:3d} #{vid} 序号={num or '-'}  {t}")
+        print(i18n.t("fa_series_item", i=i, vid=vid, num=num or "-", title=t))
 
     if args.dry_run:
-        print("\n[dry-run] 系列识别完成，未下载。")
+        print(i18n.t("fa_dry_run_done"))
         return
 
     # ---------- 4. 下载 ----------
@@ -534,7 +536,8 @@ def main():
     if limit is None:
         return
     series = series[:limit]
-    print(f"\n下载前 {len(series)} 张（{args.workers} 线程，延迟 0~{args.delay}s）")
+    print(i18n.t("fa_download_plan", n=len(series), workers=args.workers,
+                 delay=args.delay))
 
     out = Path(args.output) if args.output else Path(safe_name(series_key or title))
     out.mkdir(parents=True, exist_ok=True)
@@ -558,10 +561,10 @@ def main():
         for _ in as_completed(futures):
             pass
 
-    print("\n===== 下载完成 =====")
-    print(f"系列: {series_key} | 作者: {artist}")
-    print(f"成功: {downloaded} | 失败: {failed}")
-    print(f"文件保存至: {out.resolve()}")
+    print(i18n.t("fa_done_title"))
+    print(i18n.t("fa_summary_series", series=series_key, artist=artist))
+    print(i18n.t("fa_summary_counts", ok=downloaded, fail=failed))
+    print(i18n.t("fa_saved_to", path=out.resolve()))
 
 
 if __name__ == "__main__":

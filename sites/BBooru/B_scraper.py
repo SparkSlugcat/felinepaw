@@ -67,6 +67,7 @@ for _p in (os.path.dirname(os.path.dirname(_here)), os.path.dirname(_here), _her
         sys.path.insert(0, _p)
         break
 import common
+import i18n
 sanitize_filename = common.sanitize_filename
 parse_limit = common.parse_limit
 
@@ -182,38 +183,37 @@ def parse_pick(spec, total):
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        description="从 bbooru.com 下载原图：--tags 按标签（JSON API 优先），或 --pool 按合集（HTML）")
+        description=i18n.t("bb_cli_desc"))
     parser.add_argument("--tags", default=None,
-                        help="标签，多个用空格分开，如 'cute fox' 或 landscape（与 --pool 二选一）")
+                        help=i18n.t("bb_cli_tags"))
     parser.add_argument("--pool", default=None,
-                        help="pool 的 show 页 URL 或纯 id，如 https://bbooru.com/index.php?page=pool&s=show&id=33976 或 33976")
+                        help=i18n.t("bb_cli_pool"))
     parser.add_argument("--mode", choices=["auto", "api", "html", "artist"], default="auto",
-                        help="下载引擎: auto=API优先失败自动回退HTML(默认), api=强制API, html=强制HTML, artist=Artist模式(需配合--tags)")
+                        help=i18n.t("bb_cli_mode"))
     parser.add_argument("--limit", default=None,
-                        help="下载数量: 正整数 或 inf(全部)；不填默认只下载前 120 个")
+                        help=i18n.t("bb_cli_limit"))
     parser.add_argument("--adult", choices=['y', 'n'], default='y',
-                        help="是否包含成人内容（y=是，n=否），默认 y。n 时原图会被站点隐藏")
-    parser.add_argument("--name", default=None, help="自定义下载文件夹名称，默认与 --tags 相同")
+                        help=i18n.t("bb_cli_adult"))
+    parser.add_argument("--name", default=None, help=i18n.t("bb_cli_name"))
     parser.add_argument("-o", "--o", "--output", dest="output_dir", default='.',
-                        help="输出根目录，默认为当前目录")
-    parser.add_argument("--threads", type=int, default=8, help="并发线程数（翻页+下载），默认 8")
-    parser.add_argument("--retry", type=int, default=2, help="单个任务失败重试次数，默认 2")
+                        help=i18n.t("bb_cli_output"))
+    parser.add_argument("--threads", type=int, default=8, help=i18n.t("bb_cli_threads"))
+    parser.add_argument("--retry", type=int, default=2, help=i18n.t("bb_cli_retry"))
     parser.add_argument("--force", action="store_true",
-                        help="重新下载已存在的图片（默认跳过；用于修复下到一半的坏文件）")
+                        help=i18n.t("bb_cli_force"))
     common.add_pacing_args(parser)
     common.add_preflight_args(parser)
     parser.add_argument("--proxy", default=None,
-                        help="代理: 留空=自动检测, off=直连, 或 http://127.0.0.1:7897")
+                        help=i18n.t("bb_cli_proxy"))
     parser.add_argument("--dry-run", action="store_true",
-                        help="只列出收集到的条目（带序号），不下载")
+                        help=i18n.t("bb_cli_dry_run"))
     parser.add_argument("--pick", default=None,
-                        help="只下载挑中的序号，如 2-4,7 / 3- / -3 / all；"
-                             "序号来自 --dry-run 或 GUI「挑着下载」列表")
+                        help=i18n.t("bb_cli_pick"))
     # v5 新增参数
     parser.add_argument("--skip-others", action="store_true",
-                        help="Artist 模式：跳过不属于任何 pool 的帖子（不放入 others/ 文件夹）")
+                        help=i18n.t("bb_cli_skip_others"))
     parser.add_argument("--page", type=int, default=None,
-                        help="配合 --tags 指定只下载 API 翻页的某一页（从 1 开始）")
+                        help=i18n.t("bb_cli_page"))
     parser.add_argument("--pool-rev", action="store_true",
                         help="--pool mode: reverse numbering order")
     parser.add_argument("--force-pool-check", action="store_true",
@@ -250,7 +250,7 @@ def fetch_api_page(session, tags, pid):
         }, timeout=25)
         r.raise_for_status()
     except requests.RequestException as e:
-        raise ApiError(f"API 请求失败: {e}")
+        raise ApiError(i18n.t("bb_api_request_failed", e=e))
     return parse_api_response(r)
 
 
@@ -262,20 +262,21 @@ def parse_api_response(r):
     """
     text = (r.text or "").lstrip()
     if not text:
-        raise ApiError("API 返回空响应")
+        raise ApiError(i18n.t("bb_api_empty"))
     if text.startswith(("<", "<?xml")):
-        raise ApiError("API 返回非 JSON（可能被限流/abuse）: " + text[:120].replace("\n", " "))
+        raise ApiError(i18n.t("bb_api_not_json", body=text[:120].replace("\n", " ")))
     try:
         data = r.json()
     except ValueError as e:
-        raise ApiError(f"API 返回非法 JSON: {e}")
+        raise ApiError(i18n.t("bb_api_bad_json", e=e))
     if isinstance(data, dict):
         # 兼容 {"post":[...]} / {"posts":[...]} 包装形态
         data = data.get("post", data.get("posts", None))
         if data is None:
-            raise ApiError("未知 API 结构: " + str(list(dict(data).keys()))[:120])
+            raise ApiError(i18n.t("bb_api_unknown_struct",
+                                  keys=str(list(dict(data).keys()))[:120]))
     if not isinstance(data, list):
-        raise ApiError("未知 API 结构，不是数组: " + str(data)[:120])
+        raise ApiError(i18n.t("bb_api_unknown_not_list", data=str(data)[:120]))
     return data
 
 
@@ -860,7 +861,7 @@ def extract_pool_id(pool_arg):
     m = re.search(r'(?:[?&]id=|s=show[^"&\s]*id=)(\d+)', pool_arg)
     if m:
         return m.group(1)
-    raise ValueError(f"无法从 {pool_arg!r} 解析 pool id（请给 show 页 URL 或纯数字）")
+    raise ValueError(i18n.t("bb_err_pool_id", arg=pool_arg))
 
 
 def pool_collect_tasks(pool_id, limit=None, adult_flag=True, proxy=None, pool_rev=False):
@@ -958,8 +959,8 @@ def download_one(task, download_dir, adult_flag, retries, proxy=None,
                 r.raise_for_status()
                 url = parse_original_url(r.text, task["page"])
                 if not url:
-                    hint = ("；可能成人内容被隐藏，试试 --adult y" if not adult_flag else "")
-                    raise RuntimeError(f"未找到 '{ORIGINAL_TEXT}' 链接{hint}")
+                    hint = (i18n.t("bb_err_adult_hint") if not adult_flag else "")
+                    raise RuntimeError(i18n.t("bb_err_no_original", text=ORIGINAL_TEXT, hint=hint))
 
             ext = get_extension_from_url(url)
             filename = sanitize_filename(item_id) + ext
@@ -980,7 +981,7 @@ def download_one(task, download_dir, adult_flag, retries, proxy=None,
         except Exception as e:
             last_err = e
             if pacing is not None and pacing.penalize_on_ratelimit(e):
-                print(f"[COOLDOWN] {item_id}: HTTP 限流，全部线程安静 {pacing.cooldown:.0f}s")
+                print(i18n.t("bb_cooldown", item=item_id, sec=pacing.cooldown))
             if attempt < retries:
                 time.sleep(0.4 * (attempt + 1))
 

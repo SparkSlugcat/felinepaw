@@ -45,6 +45,7 @@ for _p in (os.path.dirname(os.path.dirname(_here)), os.path.dirname(_here), _her
         sys.path.insert(0, _p)
         break
 import common
+import i18n
 # 共享函数别名（供本脚本及 yiff_auto_scraper 使用）
 create_session = common.create_session
 sanitize_filename = common.sanitize_filename
@@ -135,7 +136,7 @@ def probe_and_download(session: requests.Session, post_id: str, kind: str,
             os.utime(filepath, None)
             return True
         except requests.RequestException as e:
-            log(f"  下载 {post_id} 失败: {e}")
+            log(i18n.t("yf_err_download", id=post_id, e=e))
             if filepath.exists():
                 try:
                     filepath.unlink()
@@ -150,45 +151,46 @@ def probe_and_download(session: requests.Session, post_id: str, kind: str,
 # ============================================================
 
 def main():
-    parser = argparse.ArgumentParser(description="下载 yiffverse.com 指定标签的最新图片/视频")
-    parser.add_argument("tag", help="标签名，例如 feline 或 jack-jackal_(character)")
-    parser.add_argument("-o", "--output", default=None, help="保存目录（默认以标签名命名）")
+    parser = argparse.ArgumentParser(description=i18n.t("yf_cli_desc"))
+    parser.add_argument("tag", help=i18n.t("yf_help_tag"))
+    parser.add_argument("-o", "--output", default=None, help=i18n.t("yf_help_output"))
     parser.add_argument("--limit", default=None,
-                        help="下载数量: 正整数 或 inf(全部)；不填默认只下载前 120 个")
+                        help=i18n.t("yf_help_limit"))
     parser.add_argument("--proxy", default=None,
-                        help="代理设置: 留空=自动检测, off=直连, 或 http://127.0.0.1:7897")
+                        help=i18n.t("yf_help_proxy"))
     args = parser.parse_args()
 
     tag = args.tag.strip()
-    print(f"标签: {tag}")
-    print("注意: yiffverse 服务端每个标签只渲染最新约 30 个帖子（分页在客户端实现），")
-    print("      本脚本只能下载到最新约 30 个作品。")
+    print(i18n.t("yf_tag", tag=tag))
+    print(i18n.t("yf_note1"))
+    print(i18n.t("yf_note2"))
 
     session = create_session(args.proxy)
     if session.proxies:
-        print(f"已启用代理: {list(session.proxies.values())[0]}")
+        print(i18n.t("yf_proxy_enabled", proxy=list(session.proxies.values())[0]))
     else:
-        print("未使用代理（直连）")
+        print(i18n.t("yf_proxy_direct"))
 
     # 1. 解析标签页
-    print(f"正在获取标签页 {SITE_BASE}/tag/{quote(tag, safe='')} ...")
+    print(i18n.t("yf_fetching_tag_page", url=f"{SITE_BASE}/tag/{quote(tag, safe='')}"))
     try:
         posts = fetch_tag_page(session, tag)
     except requests.RequestException as e:
-        print(f"获取标签页失败: {e}")
+        print(i18n.t("yf_err_fetch_tag_page", e=e))
         sys.exit(1)
 
     if not posts:
-        print("没有解析到任何帖子（标签可能不存在或页面结构已变化）。")
+        print(i18n.t("yf_no_posts"))
         return
 
     limit = parse_limit(args.limit, len(posts))
     if limit is None:
         return
     posts = posts[:limit]
-    print(f"下载数量上限: {limit}")
-    print(f"解析到 {len(posts)} 个帖子 (图片 {sum(1 for p in posts if p[1]=='image')}，"
-          f"视频 {sum(1 for p in posts if p[1]=='video')})")
+    print(i18n.t("yf_limit", n=limit))
+    print(i18n.t("yf_parsed", n=len(posts),
+                 images=sum(1 for p in posts if p[1] == 'image'),
+                 videos=sum(1 for p in posts if p[1] == 'video')))
 
     # 2. 输出目录 + 断点续传
     out = Path(args.output) if args.output else Path(sanitize_filename(tag))
@@ -196,7 +198,7 @@ def main():
     existing_max = find_existing_max(out)
     start_index = existing_max + 1
     if existing_max > 0:
-        print(f"检测到已有 {existing_max} 个文件，从序号 {start_index} 继续下载")
+        print(i18n.t("yf_resume", n=existing_max, start=start_index))
 
     # 3. 下载（顺序编号，与列表顺序一致）
     downloaded = failed = skipped = 0
@@ -207,7 +209,7 @@ def main():
         filename = f"{target_index}.jpg"
         filepath = out / filename        # 扩展名探测后如不同，会重命名
         if filepath.exists():
-            print(f"[{target_index}] #{pid} 已存在，跳过")
+            print(i18n.t("yf_skip_exists", idx=target_index, pid=pid))
             skipped += 1
             continue
 
@@ -225,17 +227,19 @@ def main():
                 break
             time.sleep(0.3)
         if not real_ext:
-            print(f"[{target_index}] #{pid} 未找到原文件，跳过")
+            print(i18n.t("yf_err_no_original", idx=target_index, pid=pid))
             failed += 1
             continue
 
         final_path = out / f"{target_index}.{real_ext}"
         if final_path.exists():
-            print(f"[{target_index}] #{pid} -> {final_path.name} 已存在，跳过")
+            print(i18n.t("yf_skip_exists_named", idx=target_index, pid=pid,
+                         name=final_path.name))
             skipped += 1
             continue
 
-        print(f"[{target_index}/{len(posts)}] 下载 #{pid} -> {final_path.name}")
+        print(i18n.t("yf_downloading", idx=target_index, total=len(posts),
+                     pid=pid, name=final_path.name))
         if probe_and_download(session, pid, kind, chunk, final_path, log=print):
             downloaded += 1
         else:
@@ -243,12 +247,12 @@ def main():
         time.sleep(REQUEST_DELAY)
 
     # 4. 汇总
-    print("\n===== 下载完成 =====")
-    print(f"标签: {tag}")
-    print(f"成功下载: {downloaded}")
-    print(f"已存在跳过: {skipped}")
-    print(f"失败: {failed}")
-    print(f"文件保存至: {out.resolve()}")
+    print(i18n.t("yf_done_title"))
+    print(i18n.t("yf_tag", tag=tag))
+    print(i18n.t("yf_summary_downloaded", n=downloaded))
+    print(i18n.t("yf_summary_skipped", n=skipped))
+    print(i18n.t("yf_summary_failed", n=failed))
+    print(i18n.t("yf_saved_to", path=out.resolve()))
 
 
 if __name__ == "__main__":

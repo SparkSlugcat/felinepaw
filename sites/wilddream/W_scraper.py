@@ -11,6 +11,14 @@ from urllib.parse import urljoin, urlparse
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# ---- 定位并导入 i18n（词条表与 common.py 同在项目根） ----
+_here = os.path.dirname(os.path.abspath(__file__))
+for _p in (os.path.dirname(os.path.dirname(_here)), os.path.dirname(_here), _here):
+    if os.path.exists(os.path.join(_p, "i18n.py")):
+        sys.path.insert(0, _p)
+        break
+import i18n
+
 # Windows GBK 控制台可能编不了个别字符（emoji 等）→ 打印时替换为 '?'，避免 UnicodeEncodeError 崩溃
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(errors="replace")
@@ -49,7 +57,7 @@ def polite_get(url, timeout=20, stream=False, retries=2):
         except requests.RequestException as e:
             if attempt >= retries:
                 raise
-            print(f"  [WARN] 请求失败({e})，{attempt + 1} 秒后重试…")
+            print(i18n.t("wd_retry_warn", e=e, n=attempt + 1))
             time.sleep(attempt + 1)
 # =======================================================================
 
@@ -80,7 +88,7 @@ def get_post_url(url, limit=10 ** 9):
         if len(post_url_lis) >= limit:      # 够了立刻停
             post_url_lis = post_url_lis[:limit]
             break
-    print(f"共收集到 {len(post_url_lis)} 个帖子")
+    print(i18n.t("wd_collected_posts", n=len(post_url_lis)))
     return post_url_lis
 
 
@@ -89,7 +97,7 @@ def get_single_post(post_url):
     post_tree = etree.HTML(polite_get(post_url).text)
     src = post_tree.xpath('//img[@id="artwork_img"]/@src')
     if not src:                             # 该帖可能已删除/无图
-        print(f"  [WARN] 无主图，跳过: {post_url}")
+        print(i18n.t("wd_warn_no_image", url=post_url))
         return None, None
     img_url = urljoin(main_site, src[0])
 
@@ -105,7 +113,7 @@ def download_single(img_url, img_name, download_dir):
     path = os.path.join(download_dir, img_name)
 
     if os.path.exists(path) and os.path.getsize(path) > 0:
-        print(f"已存在，跳过: {img_name}")
+        print(i18n.t("wd_skip_exists", name=img_name))
         return "skip"
 
     tmp = path + ".part"
@@ -115,12 +123,12 @@ def download_single(img_url, img_name, download_dir):
                 for chunk in r.iter_content(1024 * 64):
                     f.write(chunk)
         os.replace(tmp, path)               # 原子改名：要么没有，要么完整
-        print(f"已保存: {img_name}")
+        print(i18n.t("wd_saved", name=img_name))
         return "ok"
     except Exception as e:
         if os.path.exists(tmp):
             os.remove(tmp)                  # 失败清掉残留的 .part
-        print(f"下载失败: {img_name} ({e})")
+        print(i18n.t("wd_download_failed", name=img_name, err=e))
         return "fail"
 
 
@@ -134,14 +142,14 @@ def get_comic_name(tree):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="下载 WildDream 用户的某个漫画文件夹")
-    parser.add_argument("url", help="画廊 URL，例如 https://www.wilddream.net/art/userpage/gallery?userpagename=...&folderid=485")
+    parser = argparse.ArgumentParser(description=i18n.t("wd_desc"))
+    parser.add_argument("url", help=i18n.t("wd_help_url"))
     parser.add_argument("--limit", default="80",
-                        help="最多下载张数：数字 或 inf(全部)；默认 80")
+                        help=i18n.t("wd_help_limit"))
     parser.add_argument("-o", "--output", dest="output", default=".",
-                        help="输出根目录（默认当前目录），会在其下建 <漫画名>/ 子文件夹")
+                        help=i18n.t("wd_help_output"))
     parser.add_argument("--threads", type=int, default=8,
-                        help="下载并发线程数，默认 8")
+                        help=i18n.t("wd_help_threads"))
     return parser.parse_args()
 
 
@@ -168,26 +176,26 @@ def main():
 
     limit_num = parse_limit(args.limit)
     if limit_num is None:
-        print("--limit 需要是正整数或 inf，已按默认 80 处理")
+        print(i18n.t("wd_limit_invalid"))
         limit_num = 80
     elif limit_num >= 10 ** 9:
-        print("下载全部 post")
+        print(i18n.t("wd_all_posts"))
     else:
-        print(f"下载前 {limit_num} 个 post")
+        print(i18n.t("wd_first_posts", n=limit_num))
 
     # 抓首页取漫画名
     tree = etree.HTML(polite_get(base_url).text)
     file_name = get_comic_name(tree)
-    print(f"漫画：{file_name}")
+    print(i18n.t("wd_comic_name", name=file_name))
 
     post_url_lis = get_post_url(base_url, limit_num)
     if not post_url_lis:
-        print("没有收集到任何帖子，退出。")
+        print(i18n.t("wd_no_posts"))
         return
 
     download_dir = os.path.join(os.path.abspath(args.output), file_name)
     os.makedirs(download_dir, exist_ok=True)
-    print(f"下载目录：{download_dir}")
+    print(i18n.t("wd_download_dir", path=download_dir))
 
     # ---- 并发下载：每个帖子 = 一个任务（详情页取图 + 下载）----
     def process_one(post_url):
@@ -198,7 +206,7 @@ def main():
                 return "fail", post_url
             return download_single(img_url, img_name, download_dir), img_name
         except Exception as e:              # 单个任务异常不拖垮整批
-            print(f"  [FAIL] {post_url} 处理异常：{e}")
+            print(i18n.t("wd_task_error", url=post_url, err=e))
             return "fail", post_url
 
     workers = max(1, min(args.threads, 32))
@@ -212,7 +220,7 @@ def main():
             fail += st == "fail"
 
     print("=" * 40)
-    print(f"完成：成功 {ok}，已存在跳过 {skip}，失败 {fail}")
+    print(i18n.t("wd_summary", ok=ok, skip=skip, fail=fail))
 
 
 if __name__ == '__main__':

@@ -34,6 +34,14 @@ from pathlib import Path
 # ---- 环境准备：优先用当前环境的 DrissionPage；没有则回退到 ../_dsp_env ----
 _HERE = Path(__file__).resolve().parent
 _ENV = _HERE.parent / "_dsp_env"
+
+# ---- 定位项目根目录（felinepaw/）并导入 i18n，供下面的提示语使用 ----
+for _p in (_HERE.parent.parent, _HERE.parent, _HERE):
+    if (_p / "i18n.py").exists():
+        sys.path.insert(0, str(_p))
+        break
+import i18n
+
 try:
     from DrissionPage import ChromiumOptions, ChromiumPage
 except ImportError:
@@ -41,7 +49,7 @@ except ImportError:
         sys.path.insert(0, str(_ENV))
         from DrissionPage import ChromiumOptions, ChromiumPage
     else:
-        print("未找到 DrissionPage。请先激活 py39 环境：conda activate py39")
+        print(i18n.t("fa_err_no_drissionpage"))
         sys.exit(1)
 
 sys.path.insert(0, str(_HERE))
@@ -88,15 +96,15 @@ def collect_all_posts(page, max_pages: int, log=print) -> list:
         for p in new:
             seen.add(p[0])
             all_posts.append(p)
-        log(f"第 {page_no} 轮: 解析 {len(new)} 个新帖子（累计 {len(all_posts)}）")
+        log(i18n.t("yf_round", page=page_no, n=len(new), total=len(all_posts)))
 
         if len(all_posts) == last_count:
-            log("滚动后没有新帖子，加载结束。")
+            log(i18n.t("yf_scroll_done"))
             break
         last_count = len(all_posts)
 
         if page_no >= max_pages:
-            log(f"已达最大轮数 {max_pages}，停止。")
+            log(i18n.t("yf_max_rounds", n=max_pages))
             break
 
         page.scroll.to_bottom()          # 触发无限滚动加载
@@ -110,21 +118,21 @@ def collect_all_posts(page, max_pages: int, log=print) -> list:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="yiffverse 全量标签爬虫（浏览器翻页版）")
-    parser.add_argument("tag", help="标签名，例如 feline")
-    parser.add_argument("-o", "--output", default=None, help="保存目录（默认以标签名命名）")
-    parser.add_argument("--max-pages", type=int, default=30, help="最多翻页数（每页约30帖）")
-    parser.add_argument("--headless", action="store_true", help="无头模式（不弹浏览器窗口）")
-    parser.add_argument("--list-only", action="store_true", help="只列出帖子，不下载")
+    parser = argparse.ArgumentParser(description=i18n.t("yf_auto_desc"))
+    parser.add_argument("tag", help=i18n.t("yf_auto_help_tag"))
+    parser.add_argument("-o", "--output", default=None, help=i18n.t("yf_help_output"))
+    parser.add_argument("--max-pages", type=int, default=30, help=i18n.t("yf_help_max_pages"))
+    parser.add_argument("--headless", action="store_true", help=i18n.t("yf_help_headless"))
+    parser.add_argument("--list-only", action="store_true", help=i18n.t("yf_help_list_only"))
     parser.add_argument("--limit", default=None,
-                        help="下载数量: 正整数 或 inf(全部)；不填默认只下载前 120 个")
-    parser.add_argument("--proxy", default=None, help="代理: 留空=自动, off=直连, 或 http://127.0.0.1:7897")
+                        help=i18n.t("yf_help_limit"))
+    parser.add_argument("--proxy", default=None, help=i18n.t("yf_auto_help_proxy"))
     parser.add_argument("--browser", default=None,
-                        help="浏览器可执行文件路径（默认自动用 Edge，其次 Chrome）")
+                        help=i18n.t("yf_help_browser"))
     args = parser.parse_args()
 
     tag = args.tag.strip()
-    print(f"标签: {tag}（浏览器滚动加载模式，最多 {args.max_pages} 轮）")
+    print(i18n.t("yf_auto_tag", tag=tag, n=args.max_pages))
 
     # 1. 启动浏览器（与你平时自动化环境一致，优先 Edge）
     co = ChromiumOptions()
@@ -140,12 +148,12 @@ def main():
         co.set_browser_path(edge)
     elif Path(chrome).exists():
         co.set_browser_path(chrome)
-    print("正在启动浏览器（DrissionPage）...")
+    print(i18n.t("yf_starting_browser"))
     page = ChromiumPage(co)
     try:
         # 2. 打开标签页并翻页收集
         url = f"https://yiffverse.com/tag/{ys.quote(tag, safe='')}"
-        print(f"打开 {url}")
+        print(i18n.t("yf_open_url", url=url))
         page.get(url)
         time.sleep(3)          # 等待首屏 SSR + Blazor 渲染
         posts = collect_all_posts(page, args.max_pages)
@@ -156,35 +164,36 @@ def main():
             pass
 
     if not posts:
-        print("没有收集到任何帖子（标签可能不存在）。")
+        print(i18n.t("yf_no_posts_collected"))
         return
-    print(f"\n共收集 {len(posts)} 个帖子"
-          f"（图片 {sum(1 for p in posts if p[1]=='image')}，视频 {sum(1 for p in posts if p[1]=='video')}）")
+    print(i18n.t("yf_collected", n=len(posts),
+                 images=sum(1 for p in posts if p[1] == 'image'),
+                 videos=sum(1 for p in posts if p[1] == 'video')))
 
     if args.list_only:
         for i, (pid, kind, _) in enumerate(posts, 1):
-            print(f"  {i:4d} #{pid} [{kind}]")
+            print(i18n.t("yf_list_item", i=i, pid=pid, kind=kind))
         return
 
     limit = ys.parse_limit(args.limit, len(posts))
     if limit is None:
         return
     posts = posts[:limit]
-    print(f"下载数量上限: {limit}")
+    print(i18n.t("yf_limit", n=limit))
 
     # 3. 下载（复用 yiff_scraper 的逻辑）
     session = ys.create_session(args.proxy)
     if session.proxies:
-        print(f"已启用代理: {list(session.proxies.values())[0]}")
+        print(i18n.t("yf_proxy_enabled", proxy=list(session.proxies.values())[0]))
     else:
-        print("未使用代理（直连）")
+        print(i18n.t("yf_proxy_direct"))
 
     out = Path(args.output) if args.output else Path(ys.sanitize_filename(tag))
     out.mkdir(parents=True, exist_ok=True)
     existing_max = ys.find_existing_max(out)
     start_index = existing_max + 1
     if existing_max > 0:
-        print(f"检测到已有 {existing_max} 个文件，从序号 {start_index} 继续下载")
+        print(i18n.t("yf_resume", n=existing_max, start=start_index))
 
     downloaded = failed = skipped = 0
     for idx, (pid, kind, chunk) in enumerate(posts):
@@ -205,29 +214,31 @@ def main():
                 break
             time.sleep(0.3)
         if not real_ext:
-            print(f"[{target_index}] #{pid} 未找到原文件，跳过")
+            print(i18n.t("yf_err_no_original", idx=target_index, pid=pid))
             failed += 1
             continue
 
         final_path = out / f"{target_index}.{real_ext}"
         if final_path.exists():
-            print(f"[{target_index}] #{pid} -> {final_path.name} 已存在，跳过")
+            print(i18n.t("yf_skip_exists_named", idx=target_index, pid=pid,
+                         name=final_path.name))
             skipped += 1
             continue
 
-        print(f"[{target_index}/{len(posts)}] 下载 #{pid} -> {final_path.name}")
+        print(i18n.t("yf_downloading", idx=target_index, total=len(posts),
+                     pid=pid, name=final_path.name))
         if ys.probe_and_download(session, pid, kind, chunk, final_path, log=print):
             downloaded += 1
         else:
             failed += 1
         time.sleep(ys.REQUEST_DELAY)
 
-    print("\n===== 下载完成 =====")
-    print(f"标签: {tag}")
-    print(f"成功下载: {downloaded}")
-    print(f"已存在跳过: {skipped}")
-    print(f"失败: {failed}")
-    print(f"文件保存至: {out.resolve()}")
+    print(i18n.t("yf_done_title"))
+    print(i18n.t("yf_tag", tag=tag))
+    print(i18n.t("yf_summary_downloaded", n=downloaded))
+    print(i18n.t("yf_summary_skipped", n=skipped))
+    print(i18n.t("yf_summary_failed", n=failed))
+    print(i18n.t("yf_saved_to", path=out.resolve()))
 
 
 if __name__ == "__main__":

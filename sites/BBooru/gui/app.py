@@ -36,6 +36,7 @@ for _p in (SITE_DIR, BASE):
 
 import B_scraper            # noqa: E402
 import common               # noqa: E402
+import i18n                 # noqa: E402
 
 
 def resource_path(rel):
@@ -48,9 +49,12 @@ def resource_path(rel):
 # 把 B_scraper 的 print 输出接进窗口（线程安全）
 # ---------------------------------------------------------------
 class QueueWriter(io.TextIOBase):
+    # io.TextIOBase.encoding 是只读描述符，实例上赋值会抛 AttributeError；
+    # 用类属性给出同样的值（print 不依赖它，但部分库会读）。
+    encoding = "utf-8"
+
     def __init__(self, q):
         self.q = q
-        self.encoding = "utf-8"
         self._buf = ""
 
     def write(self, s):
@@ -68,11 +72,8 @@ class QueueWriter(io.TextIOBase):
             self._buf = ""
 
 
-MODES = {
-    "标签 (Tags)": "tags",
-    "合集 (Pool)": "pool",
-    "艺术家 (Artist)": "artist",
-}
+#: 模式内部名（界面上显示的是 bb_mode_<key> 的词条）
+MODE_KEYS = ("tags", "pool", "artist")
 ENGINES = ["auto", "api", "html"]
 
 
@@ -88,11 +89,11 @@ class PickDialog(tk.Toplevel):
     """
 
     COLS = [
-        ("check",  "勾",   4,  "center"),
-        ("no",     "#",    6,  "e"),
-        ("id",     "ID",   12, "w"),
-        ("folder", "目录",  18, "w"),
-        ("url",    "地址",  64, "w"),
+        ("check",  "bb_col_check",  4,  "center"),
+        ("no",     "#",             6,  "e"),
+        ("id",     "ID",            12, "w"),
+        ("folder", "bb_col_folder", 18, "w"),
+        ("url",    "bb_col_url",    64, "w"),
     ]
     _ASCII_W = 8
 
@@ -102,7 +103,7 @@ class PickDialog(tk.Toplevel):
         self.on_pick = on_pick
         self.on_done = on_done
         self.checked = set()          # 0-based 列表下标
-        self.title("挑着下载 — 勾选要下载的条目（共 %d 项）" % len(items))
+        self.title(i18n.t("bb_pick_title", n=len(items)))
         self.geometry("980x620")
         self.transient(parent)
         self._build()
@@ -115,15 +116,14 @@ class PickDialog(tk.Toplevel):
     def _build(self):
         top = ttk.Frame(self)
         top.pack(fill="x", padx=10, pady=(10, 4))
-        ttk.Label(top, text="把要下载的条目前面勾上，点「下载选中」即可。"
-                           "序号与命令行 --pick 一致。").pack(side="left")
+        ttk.Label(top, text=i18n.t("bb_pick_hint")).pack(side="left")
 
         mid = ttk.Frame(self)
         mid.pack(fill="both", expand=True, padx=10, pady=4)
         cols = [c[0] for c in self.COLS]
         self.tree = ttk.Treeview(mid, columns=cols, show="headings", height=18)
         for cid, header, w, anchor in self.COLS:
-            self.tree.heading(cid, text=header)
+            self.tree.heading(cid, text=i18n.t(header) if header.startswith("bb_") else header)
             self.tree.column(cid, width=w * self._ASCII_W, anchor=anchor,
                              stretch=(cid == "url"))
         self.tree.tag_configure("on", background="#e8f5e9")
@@ -136,16 +136,20 @@ class PickDialog(tk.Toplevel):
 
         ops = ttk.Frame(self)
         ops.pack(fill="x", padx=10, pady=4)
-        ttk.Button(ops, text="全选", command=lambda: self._set_all(True)).pack(side="left")
-        ttk.Button(ops, text="取消全选", command=lambda: self._set_all(False)).pack(side="left", padx=(6, 0))
-        ttk.Button(ops, text="反选", command=self._invert).pack(side="left", padx=(6, 0))
+        ttk.Button(ops, text=i18n.t("bb_pick_all"),
+                   command=lambda: self._set_all(True)).pack(side="left")
+        ttk.Button(ops, text=i18n.t("bb_pick_clear"),
+                   command=lambda: self._set_all(False)).pack(side="left", padx=(6, 0))
+        ttk.Button(ops, text=i18n.t("bb_pick_invert"),
+                   command=self._invert).pack(side="left", padx=(6, 0))
         self.count_lbl = ttk.Label(ops, text="", foreground="gray")
         self.count_lbl.pack(side="left", padx=12)
 
         bot = ttk.Frame(self)
         bot.pack(fill="x", padx=10, pady=(4, 10))
-        ttk.Button(bot, text="取消", command=self._cancel).pack(side="right")
-        self.ok_btn = ttk.Button(bot, text="下载选中", command=self._confirm)
+        ttk.Button(bot, text=i18n.t("bb_pick_cancel"),
+                   command=self._cancel).pack(side="right")
+        self.ok_btn = ttk.Button(bot, text=i18n.t("bb_pick_confirm"), command=self._confirm)
         self.ok_btn.pack(side="right", padx=(0, 6))
 
     def _row_values(self, idx, checked):
@@ -202,7 +206,8 @@ class PickDialog(tk.Toplevel):
         self._refresh_count()
 
     def _refresh_count(self):
-        self.count_lbl.config(text="已选 %d / %d 项" % (len(self.checked), len(self.items)))
+        self.count_lbl.config(text=i18n.t("bb_pick_count",
+                                          sel=len(self.checked), total=len(self.items)))
         self.ok_btn.config(state="normal" if self.checked else "disabled")
 
     def _confirm(self):
@@ -221,18 +226,39 @@ class PickDialog(tk.Toplevel):
             done()
 
 
-
 class BBooruGUI:
     def __init__(self, root):
         self.root = root
-        root.title("BBooru 下载器")
         root.geometry("860x640")
+        # 队列 / 线程句柄常驻 self：切换语言重建界面时复用，不打断正在跑的任务
         self.queue = queue.Queue()
         self.evt_q = queue.Queue()      # 线程 → 主线程的事件（收集完成等）
         self.worker = None
+        self._collecting = False        # 「挑着下载」的收集线程在跑（重建界面用）
+        self._init_vars()
         self._build_ui()
         self._apply_icon()
         root.after(100, self._poll)
+
+    # ---------------- 变量（跨界面重建保留用户输入，只建一次） ----------------
+    def _init_vars(self):
+        self._mode_key = "tags"                     # 模式内部名，界面上显示译名
+        self.mode_var = tk.StringVar(value=i18n.t("bb_mode_" + self._mode_key))
+        self.engine_var = tk.StringVar(value="auto")
+        self.tags_var = tk.StringVar()
+        self.pool_var = tk.StringVar()
+        self.out_var = tk.StringVar(value=".")
+        self.limit_var = tk.StringVar()
+        self.page_var = tk.StringVar()
+        self.threads_var = tk.StringVar(value="8")
+        self.retry_var = tk.StringVar(value="2")
+        self.adult_var = tk.StringVar(value="y")
+        self.proxy_var = tk.StringVar()
+        self.rev_var = tk.BooleanVar(value=False)
+        self.skip_var = tk.BooleanVar(value=False)
+        self.dry_var = tk.BooleanVar(value=False)
+        self.status_var = tk.StringVar(value=i18n.t("bb_status_ready"))
+        self.lang_var = tk.StringVar(value=i18n.LANG_NAMES[0 if i18n.get_lang() == "zh" else 1])
 
     # ---------------- UI ----------------
     def _apply_icon(self):
@@ -244,98 +270,130 @@ class BBooruGUI:
             pass
 
     def _build_ui(self):
-        bar = ttk.LabelFrame(self.root, text=" 下载参数 ")
+        """整体重建界面（语言切换）；日志框里的历史行原样保留、不重译。"""
+        log_text = ""
+        try:
+            if hasattr(self, "log_text"):
+                log_text = self.log_text.get("1.0", "end-1c")
+        except Exception:
+            log_text = ""
+
+        for attr in ("_topbar_frame", "_params_frame", "_action_frame", "_log_frame"):
+            w = getattr(self, attr, None)
+            if w is not None:
+                w.destroy()
+                setattr(self, attr, None)
+
+        self.root.title(i18n.t("bb_app_title"))
+        self._build_langbar()
+        self._build_params()
+        self._build_action()
+        self._build_log()
+
+        if log_text:
+            self.log_text.configure(state="normal")
+            self.log_text.insert("1.0", log_text)
+            self.log_text.configure(state="disabled")
+
+        self._restore_state()
+
+    def _build_langbar(self):
+        # 顶部小横条：语言下拉框靠右，不动参数区的 grid 编号
+        top = ttk.Frame(self.root)
+        top.pack(fill="x", padx=10, pady=(8, 0))
+        self._topbar_frame = top
+        self.lang_var.set(i18n.LANG_NAMES[0 if i18n.get_lang() == "zh" else 1])
+        lang_cb = ttk.Combobox(top, textvariable=self.lang_var, width=9, state="readonly",
+                               values=list(i18n.LANG_NAMES))
+        lang_cb.pack(side="right")
+        lang_cb.bind("<<ComboboxSelected>>", self._on_lang_change)
+        ttk.Label(top, text=i18n.t("bb_lang_label")).pack(side="right", padx=(0, 4))
+
+    def _build_params(self):
+        bar = ttk.LabelFrame(self.root, text=i18n.t("bb_params_frame"))
         bar.pack(fill="x", padx=10, pady=8)
+        self._params_frame = bar
 
         # 模式
-        ttk.Label(bar, text="模式:").grid(row=0, column=0, padx=(8, 2), pady=6, sticky="e")
-        self.mode_var = tk.StringVar(value=list(MODES.keys())[0])
+        ttk.Label(bar, text=i18n.t("bb_mode_label")).grid(row=0, column=0, padx=(8, 2), pady=6, sticky="e")
+        self.mode_var.set(i18n.t("bb_mode_" + self._mode_key))
         cb = ttk.Combobox(bar, textvariable=self.mode_var, state="readonly", width=16,
-                          values=list(MODES.keys()))
+                          values=[i18n.t("bb_mode_" + k) for k in MODE_KEYS])
         cb.grid(row=0, column=1, padx=2, pady=6, sticky="w")
-        cb.bind("<<ComboboxSelected>>", lambda e: self._on_mode())
+        cb.bind("<<ComboboxSelected>>", self._on_mode_selected)
 
-        ttk.Label(bar, text="引擎(tags):").grid(row=0, column=2, padx=(12, 2), pady=6, sticky="e")
-        self.engine_var = tk.StringVar(value="auto")
+        ttk.Label(bar, text=i18n.t("bb_engine_label")).grid(row=0, column=2, padx=(12, 2), pady=6, sticky="e")
         self.engine_cb = ttk.Combobox(bar, textvariable=self.engine_var, state="readonly",
                                       width=8, values=ENGINES)
         self.engine_cb.grid(row=0, column=3, padx=2, pady=6, sticky="w")
 
         # 标签
-        ttk.Label(bar, text="标签 --tags:").grid(row=1, column=0, padx=(8, 2), pady=6, sticky="e")
-        self.tags_var = tk.StringVar()
+        ttk.Label(bar, text=i18n.t("bb_tags_label")).grid(row=1, column=0, padx=(8, 2), pady=6, sticky="e")
         self.tags_entry = ttk.Entry(bar, textvariable=self.tags_var, width=46)
         self.tags_entry.grid(row=1, column=1, columnspan=3, sticky="we", pady=6)
 
         # 池子
-        ttk.Label(bar, text="合集 --pool:").grid(row=2, column=0, padx=(8, 2), pady=6, sticky="e")
-        self.pool_var = tk.StringVar()
+        ttk.Label(bar, text=i18n.t("bb_pool_label")).grid(row=2, column=0, padx=(8, 2), pady=6, sticky="e")
         self.pool_entry = ttk.Entry(bar, textvariable=self.pool_var, width=46)
         self.pool_entry.grid(row=2, column=1, columnspan=3, sticky="we", pady=6)
 
         # 输出目录
-        ttk.Label(bar, text="输出目录:").grid(row=3, column=0, padx=(8, 2), pady=6, sticky="e")
-        self.out_var = tk.StringVar(value=".")
+        ttk.Label(bar, text=i18n.t("bb_output_label")).grid(row=3, column=0, padx=(8, 2), pady=6, sticky="e")
         ttk.Entry(bar, textvariable=self.out_var, width=40).grid(row=3, column=1, columnspan=2,
                                                                  sticky="we", pady=6)
-        ttk.Button(bar, text="浏览...", command=self._pick_dir).grid(row=3, column=3, padx=4)
+        ttk.Button(bar, text=i18n.t("bb_browse"),
+                   command=self._pick_dir).grid(row=3, column=3, padx=4)
 
         # 数量 / 线程 / 重试
         row = ttk.Frame(bar)
         row.grid(row=4, column=0, columnspan=4, sticky="we", padx=8, pady=2)
-        ttk.Label(row, text="数量 limit:").pack(side="left")
-        self.limit_var = tk.StringVar()
+        ttk.Label(row, text=i18n.t("bb_limit_label")).pack(side="left")
         ttk.Entry(row, textvariable=self.limit_var, width=10).pack(side="left", padx=(2, 10))
-        ttk.Label(row, text="页 --page:").pack(side="left")
-        self.page_var = tk.StringVar()
+        ttk.Label(row, text=i18n.t("bb_page_label")).pack(side="left")
         ttk.Entry(row, textvariable=self.page_var, width=6).pack(side="left", padx=(2, 10))
-        ttk.Label(row, text="线程:").pack(side="left")
-        self.threads_var = tk.StringVar(value="8")
+        ttk.Label(row, text=i18n.t("bb_threads_label")).pack(side="left")
         ttk.Entry(row, textvariable=self.threads_var, width=5).pack(side="left", padx=(2, 10))
-        ttk.Label(row, text="重试:").pack(side="left")
-        self.retry_var = tk.StringVar(value="2")
+        ttk.Label(row, text=i18n.t("bb_retry_label")).pack(side="left")
         ttk.Entry(row, textvariable=self.retry_var, width=5).pack(side="left", padx=(2, 10))
-        ttk.Label(row, text="成人:").pack(side="left")
-        self.adult_var = tk.StringVar(value="y")
+        ttk.Label(row, text=i18n.t("bb_adult_label")).pack(side="left")
         ttk.Combobox(row, textvariable=self.adult_var, values=["y", "n"], width=3,
                      state="readonly").pack(side="left", padx=(2, 0))
 
         # 代理 + 选项
         row2 = ttk.Frame(bar)
         row2.grid(row=5, column=0, columnspan=4, sticky="we", padx=8, pady=2)
-        ttk.Label(row2, text="代理:").pack(side="left")
-        self.proxy_var = tk.StringVar()
+        ttk.Label(row2, text=i18n.t("bb_proxy_label")).pack(side="left")
         ttk.Entry(row2, textvariable=self.proxy_var, width=26).pack(side="left", padx=(2, 10))
-        self.rev_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(row2, text="反转 pool 编号(--pool-rev)",
+        ttk.Checkbutton(row2, text=i18n.t("bb_pool_rev"),
                         variable=self.rev_var).pack(side="left")
-        self.skip_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(row2, text="跳过非池帖子(--skip-others)",
+        ttk.Checkbutton(row2, text=i18n.t("bb_skip_others"),
                         variable=self.skip_var).pack(side="left", padx=6)
-        self.dry_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(row2, text="仅收集(--dry-run)", variable=self.dry_var).pack(side="left", padx=6)
+        ttk.Checkbutton(row2, text=i18n.t("bb_dry_run"),
+                        variable=self.dry_var).pack(side="left", padx=6)
 
-        ttk.Label(bar, text="提示：limit 留空=默认120，填 inf=全部；代理留空=自动检测，off=直连",
+        ttk.Label(bar, text=i18n.t("bb_hint"),
                   foreground="gray").grid(row=6, column=0, columnspan=4, padx=8, pady=(0, 6),
                                           sticky="w")
         bar.columnconfigure(1, weight=1)
 
-        # 按钮
+    def _build_action(self):
         act = ttk.Frame(self.root)
         act.pack(fill="x", padx=10, pady=4)
-        self.start_btn = ttk.Button(act, text="▶ 开始下载", command=self._start)
+        self._action_frame = act
+        self.start_btn = ttk.Button(act, text=i18n.t("bb_start"), command=self._start)
         self.start_btn.pack(side="left")
-        self.pick_btn = ttk.Button(act, text="☑ 挑着下载", command=self._pick_download)
+        self.pick_btn = ttk.Button(act, text=i18n.t("bb_pick_button"), command=self._pick_download)
         self.pick_btn.pack(side="left", padx=8)
-        self.stop_btn = ttk.Button(act, text="■ 停止", command=self._stop, state="disabled")
+        self.stop_btn = ttk.Button(act, text=i18n.t("bb_stop"), command=self._stop, state="disabled")
         self.stop_btn.pack(side="left", padx=8)
-        ttk.Button(act, text="打开输出目录", command=self._open_out).pack(side="left", padx=8)
-        self.status_var = tk.StringVar(value="就绪")
+        ttk.Button(act, text=i18n.t("bb_open_output"),
+                   command=self._open_out).pack(side="left", padx=8)
         ttk.Label(act, textvariable=self.status_var).pack(side="left", padx=12)
 
-        # 日志
-        logf = ttk.LabelFrame(self.root, text=" 运行日志 ")
+    def _build_log(self):
+        logf = ttk.LabelFrame(self.root, text=i18n.t("bb_log_frame"))
         logf.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self._log_frame = logf
         self.log_text = tk.Text(logf, wrap="word", state="disabled",
                                 font=("Microsoft YaHei UI", 9))
         sb = ttk.Scrollbar(logf, command=self.log_text.yview)
@@ -343,10 +401,43 @@ class BBooruGUI:
         sb.pack(side="right", fill="y")
         self.log_text.pack(side="left", fill="both", expand=True)
 
+    def _restore_state(self):
+        """重建后按当前真实状态恢复按钮与状态栏（不重跑任何任务）。"""
+        running = self.worker is not None and self.worker.is_alive()
+        busy = running or self._collecting
+        self.start_btn.config(state="disabled" if busy else "normal")
+        self.pick_btn.config(state="disabled" if busy else "normal")
+        self.stop_btn.config(state="normal" if running else "disabled")
+        if running:
+            self.status_var.set(i18n.t("bb_status_running"))
+        elif self._collecting:
+            self.status_var.set(i18n.t("bb_status_collecting"))
+        else:
+            self.status_var.set(i18n.t("bb_status_ready"))
+        self._on_mode()
+
+    def _on_lang_change(self, event=None):
+        new = "zh" if self.lang_var.get() == i18n.LANG_NAMES[0] else "en"
+        if new == i18n.get_lang():
+            return
+        i18n.set_lang(new)          # 同时写偏好
+        self._build_ui()            # 重建（同进程：日志立刻变新语言）
+        self._log(i18n.t("bb_lang_switched",
+                         lang=i18n.LANG_NAMES[0 if new == "zh" else 1]))
+
+    def _mode_key_from_display(self):
+        disp = self.mode_var.get()
+        for k in MODE_KEYS:
+            if i18n.t("bb_mode_" + k) == disp:
+                return k
+        return "tags"
+
+    def _on_mode_selected(self, event=None):
+        self._mode_key = self._mode_key_from_display()
         self._on_mode()
 
     def _on_mode(self):
-        mode = MODES.get(self.mode_var.get(), "tags")
+        mode = self._mode_key
         # 艺术家模式也用 tags；pool 模式才用 pool 输入
         use_pool = mode == "pool"
         self.pool_entry.configure(state="normal" if use_pool else "disabled")
@@ -356,7 +447,7 @@ class BBooruGUI:
 
     # ---------------- 交互 ----------------
     def _pick_dir(self):
-        d = filedialog.askdirectory(title="选择输出目录")
+        d = filedialog.askdirectory(title=i18n.t("bb_choose_output_dir"))
         if d:
             self.out_var.set(d)
 
@@ -365,7 +456,7 @@ class BBooruGUI:
         try:
             os.startfile(p)
         except Exception:
-            messagebox.showinfo("提示", f"目录：{p}")
+            messagebox.showinfo(i18n.t("bb_tip_title"), i18n.t("bb_dir_is", p=p))
 
     def _log(self, msg):
         self.queue.put(str(msg))
@@ -394,26 +485,26 @@ class BBooruGUI:
 
     # ---------------- 运行 ----------------
     def _build_argv(self):
-        mode = MODES.get(self.mode_var.get(), "tags")
+        mode = self._mode_key
         tags = self.tags_var.get().strip()
         pool = self.pool_var.get().strip()
         argv = []
 
         if mode == "tags":
             if not tags:
-                raise ValueError("标签模式请在『标签 --tags』里填写标签")
+                raise ValueError(i18n.t("bb_err_tags_need"))
             argv += ["--tags", tags, "--mode", self.engine_var.get()]
             if self.page_var.get().strip():
                 argv += ["--page", self.page_var.get().strip()]
         elif mode == "pool":
             if not pool:
-                raise ValueError("合集模式请在『合集 --pool』里填 pool 的 URL 或 id")
+                raise ValueError(i18n.t("bb_err_pool_need"))
             argv += ["--pool", pool]
             if self.rev_var.get():
                 argv += ["--pool-rev"]
         else:  # artist
             if not tags:
-                raise ValueError("艺术家模式请在『标签 --tags』里填写艺术家标签")
+                raise ValueError(i18n.t("bb_err_artist_need"))
             argv += ["--tags", tags, "--mode", "artist"]
             if self.skip_var.get():
                 argv += ["--skip-others"]
@@ -434,20 +525,20 @@ class BBooruGUI:
 
     def _start(self, argv=None):
         if self.worker is not None and self.worker.is_alive():
-            messagebox.showinfo("提示", "任务正在运行中")
+            messagebox.showinfo(i18n.t("bb_tip_title"), i18n.t("bb_task_running"))
             return
         if argv is None:
             try:
                 argv = self._build_argv()
             except ValueError as e:
-                messagebox.showwarning("参数错误", str(e))
+                messagebox.showwarning(i18n.t("bb_param_error"), str(e))
                 return
 
         self._log(">>> " + " ".join(argv))
         self.start_btn.config(state="disabled")
         self.pick_btn.config(state="disabled")
         self.stop_btn.config(state="normal")
-        self.status_var.set("运行中...")
+        self.status_var.set(i18n.t("bb_status_running"))
         self.worker = threading.Thread(target=self._run_worker, args=(argv,), daemon=True)
         self.worker.start()
 
@@ -455,23 +546,24 @@ class BBooruGUI:
     def _pick_download(self):
         """先只收集列表 → 弹勾选框 → 用 --pick 只下勾中的。"""
         if self.worker is not None and self.worker.is_alive():
-            messagebox.showinfo("提示", "任务正在运行中")
+            messagebox.showinfo(i18n.t("bb_tip_title"), i18n.t("bb_task_running"))
             return
         try:
             argv = self._build_argv()
         except ValueError as e:
-            messagebox.showwarning("参数错误", str(e))
+            messagebox.showwarning(i18n.t("bb_param_error"), str(e))
             return
         # 挑着下载的语义就是「收集完立刻挑着下」，所以去掉 --dry-run
         if "--dry-run" in argv:
             argv = [a for a in argv if a != "--dry-run"]
-            self._log("[挑着下载] 已忽略「仅收集(--dry-run)」勾选")
+            self._log(i18n.t("bb_pick_ignore_dryrun"))
 
-        self._log(">>> 先收集名单: " + " ".join(argv))
+        self._log(i18n.t("bb_collect_echo") + " ".join(argv))
         self.start_btn.config(state="disabled")
         self.pick_btn.config(state="disabled")
         self.stop_btn.config(state="disabled")
-        self.status_var.set("正在收集名单...")
+        self.status_var.set(i18n.t("bb_status_collecting"))
+        self._collecting = True
         threading.Thread(target=self._collect_worker, args=(argv,), daemon=True).start()
 
     def _collect_worker(self, argv):
@@ -482,7 +574,7 @@ class BBooruGUI:
         try:
             ctx = B_scraper.collect_only(argv)
         except SystemExit as e:
-            self._log(f"[退出码 {e.code}]")
+            self._log(i18n.t("bb_exit_code", code=e.code))
         except Exception:
             self._log("[ERROR] " + traceback.format_exc())
         finally:
@@ -494,31 +586,33 @@ class BBooruGUI:
         self.evt_q.put(("collected", ctx, argv))
 
     def _on_collected(self, ctx, argv):
+        self._collecting = False
         items = (ctx or {}).get("items") or []
         if not items:
-            self._log("[收集失败或名单为空，无法挑着下]")
-            self.status_var.set("收集失败")
+            self._log(i18n.t("bb_collect_failed_log"))
+            self.status_var.set(i18n.t("bb_status_collect_failed"))
             self._reset_buttons()
             return
-        self._log("[收集到 %d 项，请在弹窗里勾选]" % len(items))
-        self.status_var.set("挑着下载：勾选后点「下载选中」")
+        self._log(i18n.t("bb_collected_log", n=len(items)))
+        self.status_var.set(i18n.t("bb_status_pick"))
 
         def on_pick(idx):
             if not idx:
-                self._log("[没勾任何项，已取消]")
+                self._log(i18n.t("bb_pick_none"))
                 return
-            self._log("[已选 %d 项，开始下载]" % len(idx))
+            self._log(i18n.t("bb_pick_start", n=len(idx)))
             self._start(argv + ["--pick", ",".join(str(i) for i in idx)])
 
         PickDialog(self.root, items, on_pick=on_pick, on_done=self._reset_buttons)
 
     def _reset_buttons(self):
         running = self.worker is not None and self.worker.is_alive()
-        self.start_btn.config(state="disabled" if running else "normal")
-        self.pick_btn.config(state="disabled" if running else "normal")
+        busy = running or self._collecting
+        self.start_btn.config(state="disabled" if busy else "normal")
+        self.pick_btn.config(state="disabled" if busy else "normal")
         self.stop_btn.config(state="normal" if running else "disabled")
-        if not running:
-            self.status_var.set("就绪")
+        if not busy:
+            self.status_var.set(i18n.t("bb_status_ready"))
 
     def _run_worker(self, argv):
         writer = QueueWriter(self.queue)
@@ -527,7 +621,7 @@ class BBooruGUI:
         try:
             B_scraper.main(argv)
         except SystemExit as e:                 # argparse 退出等
-            self._log(f"[退出码 {e.code}]")
+            self._log(i18n.t("bb_exit_code", code=e.code))
         except Exception:
             self._log("[ERROR] " + traceback.format_exc())
         finally:
@@ -542,13 +636,13 @@ class BBooruGUI:
         self.start_btn.config(state="normal")
         self.pick_btn.config(state="normal")
         self.stop_btn.config(state="disabled")
-        self.status_var.set("完成")
-        self._log("[任务结束]")
+        self.status_var.set(i18n.t("bb_status_done"))
+        self._log(i18n.t("bb_task_end"))
 
     def _stop(self):
         B_scraper.request_cancel()
-        self.status_var.set("正在停止（已下载的会保留，可重跑续传）...")
-        self._log("[已请求停止]")
+        self.status_var.set(i18n.t("bb_status_stopping"))
+        self._log(i18n.t("bb_stop_requested"))
 
 
 def _selftest():
