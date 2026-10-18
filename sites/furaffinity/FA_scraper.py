@@ -539,7 +539,7 @@ def main():
     print(i18n.t("fa_download_plan", n=len(series), workers=args.workers,
                  delay=args.delay))
 
-    out = Path(args.output) if args.output else Path(safe_name(series_key or title))
+    out = Path(args.output) if args.output else Path(sanitize_filename(series_key or title))
     out.mkdir(parents=True, exist_ok=True)
 
     lock = threading.Lock()

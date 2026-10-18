@@ -243,6 +243,7 @@ class BBooruGUI:
     # ---------------- 变量（跨界面重建保留用户输入，只建一次） ----------------
     def _init_vars(self):
         self._mode_key = "tags"                     # 模式内部名，界面上显示译名
+        self._mode_idx = MODE_KEYS.index(self._mode_key)   # 下拉框身份用「下标」，不认译文
         self.mode_var = tk.StringVar(value=i18n.t("bb_mode_" + self._mode_key))
         self.engine_var = tk.StringVar(value="auto")
         self.tags_var = tk.StringVar()
@@ -316,10 +317,10 @@ class BBooruGUI:
 
         # 模式
         ttk.Label(bar, text=i18n.t("bb_mode_label")).grid(row=0, column=0, padx=(8, 2), pady=6, sticky="e")
-        self.mode_var.set(i18n.t("bb_mode_" + self._mode_key))
-        cb = ttk.Combobox(bar, textvariable=self.mode_var, state="readonly", width=16,
-                          values=[i18n.t("bb_mode_" + k) for k in MODE_KEYS])
+        self.mode_cb = cb = ttk.Combobox(bar, textvariable=self.mode_var, state="readonly", width=16,
+                                         values=[i18n.t("bb_mode_" + k) for k in MODE_KEYS])
         cb.grid(row=0, column=1, padx=2, pady=6, sticky="w")
+        cb.current(self._mode_idx)      # 按「下标」回填：译文变了也不会错位
         cb.bind("<<ComboboxSelected>>", self._on_mode_selected)
 
         ttk.Label(bar, text=i18n.t("bb_engine_label")).grid(row=0, column=2, padx=(12, 2), pady=6, sticky="e")
@@ -426,14 +427,18 @@ class BBooruGUI:
                          lang=i18n.LANG_NAMES[0 if new == "zh" else 1]))
 
     def _mode_key_from_display(self):
-        disp = self.mode_var.get()
-        for k in MODE_KEYS:
-            if i18n.t("bb_mode_" + k) == disp:
-                return k
-        return "tags"
+        """按下拉框**下标**取模式名。不拿译文反查 —— 两个模式译文一旦相同就会静默回退成 tags。"""
+        try:
+            idx = self.mode_cb.current()
+        except (AttributeError, tk.TclError):
+            return self._mode_key
+        if 0 <= idx < len(MODE_KEYS):
+            return MODE_KEYS[idx]
+        return self._mode_key
 
     def _on_mode_selected(self, event=None):
         self._mode_key = self._mode_key_from_display()
+        self._mode_idx = MODE_KEYS.index(self._mode_key)
         self._on_mode()
 
     def _on_mode(self):

@@ -31,6 +31,8 @@ import sys
 import time
 from pathlib import Path
 
+import requests
+
 # ---- 环境准备：优先用当前环境的 DrissionPage；没有则回退到 ../_dsp_env ----
 _HERE = Path(__file__).resolve().parent
 _ENV = _HERE.parent / "_dsp_env"
