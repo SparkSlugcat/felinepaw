@@ -22,6 +22,10 @@
 | #2 | e-hentai 搜索分页：`&page=N` 为无效参数 | 高（静默失败） | ✅ 已修复 | 2026-09-27 |
 | #3 | 统一入口的站点→目录映射错误（`ehentai` / `fa`） | 中 | ✅ 已修复 | 2026-09-27 |
 | #4 | `--pick` 落盘文件名不得重新编号 | 高（静默丢图） | ✅ 实现时已规避 | 2026-09-27 |
+| #5 | `safe_name` 未定义 → `NameError`（原 BUGS B1） | 高（必崩） | ✅ 已修复 | 2026-10-18 |
+| #6 | yiff 自动模式 `requests` 未导入（原 BUGS B2） | 中（吞异常） | ✅ 已修复 | 2026-10-18 |
+| #7 | `probe.py` 的 `urlparse` 未导入（原 BUGS B3） | 低 | ✅ 已修复 | 2026-10-18 |
+| #8 | BBooru 用译文当模式身份（原 BUGS B4） | 低（静默回退） | ✅ 已修复 | 2026-10-18 |
 
 ---
 
@@ -321,3 +325,146 @@ existing = [p for p in out.glob(f"{idx}.*") if not p.name.endswith(".part")]
 ```
 
 否则上一轮中断留下的 `1.jpg.part` 会被 `glob("1.*")` 命中，导致 1 号图被永久跳过。
+
+
+---
+
+## #5 `safe_name` 未定义 → `NameError`（高，必崩）
+
+| 字段 | 内容 |
+|---|---|
+| **状态** | ✅ 已修复（2026-10-18）—— 改用 `sanitize_filename` |
+| **严重级别** | 高 —— 走到即崩，不是偶发 |
+| **影响范围** | `sites/furaffinity/FA_scraper.py:542` |
+| **首次出现** | `0e9af61 init`（2026-08-31）起一直存在 |
+
+**Summary (EN)** — `FA_scraper.py` called `safe_name(...)` but only aliased `sanitize_filename`.
+The name never existed in the module or in `common.py`; importing the module succeeded, so
+`py_compile` and every syntax check stayed green and the failure surfaced only at that line.
+
+### 为什么长期没被发现
+
+`felinepaw_tool.py:203` 里是 `_add("-o", args.output or str(common.local_out_root()))` ——
+统一入口永远补一个 `-o`，所以 `args.output` 恒非空，`else` 分支是死代码。只有绕过统一入口、
+直接敲站点脚本且不带 `-o` 才会踩到。
+
+### 修复
+
+```diff
+-    out = Path(args.output) if args.output else Path(safe_name(series_key or title))
++    out = Path(args.output) if args.output else Path(sanitize_filename(series_key or title))
+```
+
+两处语义等价：`sanitize_filename` 本来就是做「文件名安全化」的那一个，且它已在第 68 行被
+alias 进来。修复后 `import FA_scraper` 的命名空间里 `sanitize_filename` 存在且
+`is common.sanitize_filename` 为 `True`。
+
+### 验证
+
+```bash
+python sites/furaffinity/FA_scraper.py "https://www.furaffinity.net/view/xxxxx/" --dry-run
+python sites/furaffinity/FA_scraper.py "https://www.furaffinity.net/view/xxxxx/"   # 不带 -o
+```
+
+---
+
+## #6 yiff 自动模式下 `requests` 未导入（中）
+
+| 字段 | 内容 |
+|---|---|
+| **状态** | ✅ 已修复（2026-10-18）—— 文件顶部补 `import requests` |
+| **严重级别** | 中 —— 只在 HEAD 探测抛异常时命中；命中即把「跳过这张」变成「整个循环中断」 |
+| **影响范围** | `sites/yiff/yiff_auto_scraper.py:210` |
+
+**Summary (EN)** — The `except requests.RequestException:` handler referenced a module that was
+never imported. The class expression is evaluated only when an exception arrives, so the defect
+stayed invisible until a real network hiccup turned it into
+`NameError: name 'requests' is not defined`, aborting the rest of the extension-probing loop.
+
+### 修复
+
+在标准库 import 块之后、`_HERE` 环境准备之前补入：
+
+```python
+import requests
+```
+
+**没有**写成 `ys.requests` —— 那是在依赖「邻居碰巧也 import 了 requests」，
+`yiff_scraper.py` 哪天去掉这个 import 就会二次踩坑。
+
+### 验证
+
+`import yiff_auto_scraper` 后 `hasattr(mod, "requests")` 为 `True`（修复前为 `False`）。
+
+---
+
+## #7 `probe.py` 的 `urlparse` 未导入（低）
+
+| 字段 | 内容 |
+|---|---|
+| **状态** | ✅ 已修复（2026-10-18）—— 补 `from urllib.parse import urlparse` |
+| **严重级别** | 低 —— 只有带 `--try-api` 才走 |
+| **影响范围** | `felinepaw_auto/probe.py:36` |
+
+**Summary (EN)** — `probe_api()` used `urlparse` twice in one expression, but the module never
+imported it; `--try-api` was the only path that reached it, so the normal probe flow hid it.
+
+### 修复
+
+```python
+from urllib.parse import urlparse      # 放在标准库 import 块内
+```
+
+同样**没有**用 `from core import urlparse` 蹭邻居 —— 那是隐式依赖。
+
+### 验证
+
+`import probe` 后 `hasattr(mod, "urlparse")` 为 `True`（修复前为 `False`）。
+
+---
+
+## #8 BBooru 用「译文」当模式身份（低，静默回退）
+
+| 字段 | 内容 |
+|---|---|
+| **状态** | ✅ 已修复（2026-10-18）—— 改为按下拉框**下标**取模式 |
+| **严重级别** | 低 —— 译文撞车时静默回退成 `tags`，不报错 |
+| **影响范围** | `sites/BBooru/gui/app.py`（`_init_vars` / `_build_params` / `_mode_key_from_display` / `_on_mode_selected`） |
+
+**Summary (EN)** — The mode picker reverse-mapped the Combobox *display text* back to an internal
+key by comparing `i18n.t("bb_mode_" + k) == disp`. Any collision (two modes translating identically,
+or a locale added later) silently fell back to `"tags"`. `pixivpaw`'s picker and `felinepaw_gui.py`
+already used the index; BBooru was the odd one out.
+
+### 修复
+
+状态改为持有下标 `self._mode_idx`，下拉框用 `current()` 读写，重建界面时按 `current(idx)` 回填：
+
+```python
+self._mode_idx = MODE_KEYS.index(self._mode_key)   # _init_vars
+
+self.mode_cb = cb = ttk.Combobox(..., values=[i18n.t("bb_mode_" + k) for k in MODE_KEYS])
+cb.current(self._mode_idx)                          # _build_params：按 index 回填
+
+def _mode_key_from_display(self):                   # 不再读 mode_var 的文案
+    idx = self.mode_cb.current()
+    return MODE_KEYS[idx] if 0 <= idx < len(MODE_KEYS) else self._mode_key
+
+def _on_mode_selected(self, event=None):
+    self._mode_key = self._mode_key_from_display()
+    self._mode_idx = MODE_KEYS.index(self._mode_key)
+    self._on_mode()
+```
+
+### 实测（2026-10-18，py39 / 真实 Tk，窗口 withdraw）
+
+```
+初始 _mode_key='tags' idx=0
+选第 1 项后 _mode_key='pool'   idx=1
+选第 2 项后 _mode_key='artist' idx=2
+当前语言 zh，译文 ['标签 (Tags)', '合集 (Pool)', '艺术家 (Artist)']
+重建后 _mode_key='artist' idx=2 current=2
+重建后下拉框文本='艺术家 (Artist)'
+```
+
+切语言重建界面后模式身份不丢，且不再依赖译文比较。

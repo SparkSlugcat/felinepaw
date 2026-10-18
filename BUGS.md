@@ -4,6 +4,10 @@
 > 与设计陷阱。与 `KNOWN_ISSUES.md` 的分工是：那边收"已复现并定论（多数已修）"的条目，本文件收**待办**。
 > 每条给出：严重级别、影响范围、触发条件、根因、修法与验证方式。修复后请把条目迁进 `KNOWN_ISSUES.md` 并在此标记。
 >
+> **2026-10-18 晚更新** —— B1–B4 已修复并迁入 `KNOWN_ISSUES.md` #5–#8（四条均已离线验证：
+> 命名空间用 `importlib` 复核，B4 用真实 Tk 窗口 `withdraw` 后切换下拉框实测）。
+> 仍未处理：B5（等 spark 决定是否统一 `.pawout`）、B7（下次发版重打包）、B8（有意跳过）、B9（旧快照去留）。
+>
 > **Scope (EN)** —— This file lists defects and design traps found by static analysis during the
 > 2026-10-18 bilingual (zh/en) refactor and **not yet fixed**. `KNOWN_ISSUES.md` holds reproduced,
 > settled items (mostly fixed); this file holds the **open backlog**. Each entry gives severity,
@@ -20,10 +24,10 @@
 
 | ID | 主题 | 严重级别 | 影响面 | 状态 |
 |---|---|---|---|---|
-| B1 | `safe_name` 未定义 → `NameError` | 高（必崩） | CLI 直跑 FA 且不带 `-o` | ⬜ 待修 |
-| B2 | `requests` 未导入 → `NameError` | 中（吞异常） | yiff 自动模式的 HEAD 探测 | ⬜ 待修 |
-| B3 | `urlparse` 未导入 → `NameError` | 低 | `felinepaw_auto/probe.py --try-api` | ⬜ 待修 |
-| B4 | BBooru 用**译文**当模式身份 | 低（静默回退） | BBooru GUI 模式下拉 | ⬜ 待修 |
+| B1 | `safe_name` 未定义 → `NameError` | 高（必崩） | CLI 直跑 FA 且不带 `-o` | ✅ 已修 2026-10-18 → #5 |
+| B2 | `requests` 未导入 → `NameError` | 中（吞异常） | yiff 自动模式的 HEAD 探测 | ✅ 已修 2026-10-18 → #6 |
+| B3 | `urlparse` 未导入 → `NameError` | 低 | `felinepaw_auto/probe.py --try-api` | ✅ 已修 2026-10-18 → #7 |
+| B4 | BBooru 用**译文**当模式身份 | 低（静默回退） | BBooru GUI 模式下拉 | ✅ 已修 2026-10-18 → #8 |
 | B5 | `sites/e-hentai/EH_scraper_v2.py` 未跟进 `.pawout` | 中（行为不一致） | felinepaw 的 EH 站点 | ⬜ 待定 |
 | B6 | `清单已存:` 是跨进程契约 | 设计陷阱 | pixivpaw GUI ↔ CLI | ⚠️ 已加注释保护 |
 | B7 | 已发布的 exe 未重打包 | 待发布 | `BBooruDownloader.exe` / `E621Downloader.exe` | ⬜ 下次发版 |
@@ -36,7 +40,7 @@
 
 | 字段 | 内容 |
 |---|---|
-| **状态** | ⬜ 待修（自 2026-08-31 `0e9af61 init` 起一直存在，未被触发过） |
+| **状态** | ✅ 已修 2026-10-18 → `KNOWN_ISSUES.md` **#5**（`safe_name(...)` → `sanitize_filename(...)`，已用 `importlib` 复核命名空间） |
 | **严重级别** | 高 —— 走到就**必崩**，不是偶发 |
 | **影响范围** | `sites/furaffinity/FA_scraper.py:542` |
 | **触发条件** | **直接跑站点脚本** `FA_scraper.py`，**不带 `-o/--output`**，且**不是** `--dry-run` |
@@ -85,7 +89,7 @@ python sites/furaffinity/FA_scraper.py <某个 view URL>             # 不带 -o
 
 | 字段 | 内容 |
 |---|---|
-| **状态** | ⬜ 待修（同样来自 `0e9af61`） |
+| **状态** | ✅ 已修 2026-10-18 → `KNOWN_ISSUES.md` **#6**（文件顶部补 `import requests`，导入后 `hasattr` 为 `True`） |
 | **严重级别** | 中 —— 只在 HEAD 请求抛异常时命中；命中即**把"跳过这张"变成"整个函数中断"** |
 | **影响范围** | `sites/yiff/yiff_auto_scraper.py:210` |
 | **触发条件** | 自动模式的扩展名探测里，`session.head(url, timeout=20)` 抛任意 `requests` 层异常 |
@@ -124,7 +128,7 @@ for ext in exts:
 
 | 字段 | 内容 |
 |---|---|
-| **状态** | ⬜ 待修 |
+| **状态** | ✅ 已修 2026-10-18 → `KNOWN_ISSUES.md` **#7**（补 `from urllib.parse import urlparse`） |
 | **严重级别** | 低 —— 只有 `--try-api` 才走 |
 | **影响范围** | `felinepaw_auto/probe.py:36` |
 | **触发条件** | 带 `--try-api` 跑 `probe.py` |
@@ -157,7 +161,7 @@ from urllib.parse import urlparse
 
 | 字段 | 内容 |
 |---|---|
-| **状态** | ⬜ 待修（本次双语化时**没有**照 pixivpaw 的 index 方案改，只保持了原逻辑） |
+| **状态** | ✅ 已修 2026-10-18 → `KNOWN_ISSUES.md` **#8**（改按下拉框 `current()` 下标取模式，真实 Tk 实测通过） |
 | **严重级别** | 低 —— 当前三种语言下译文互不相同，所以看不出来 |
 | **影响范围** | `sites/BBooru/gui/app.py:431` `_mode_key_from_display()` |
 | **触发条件** | 任意两个模式在**同一语言下译文相同**；或以后加第三种语言时译名撞车 |
