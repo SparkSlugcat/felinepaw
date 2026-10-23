@@ -1,5 +1,7 @@
 # 🐾 felinepaw
 
+![felinepaw — multi-site furry image downloader](assets/social-preview.png)
+
 Multi-site furry image downloader scripts — **e621 / yiffverse / e-hentai / FurAffinity / BBooru / WildDream / HypnoHub / Rule34.us** in one place.
 All scripts share the same CLI conventions (`-o`, `--limit`, `--proxy`, `-w`, `-d`,
 `--delay`, `--jitter`, `--cooldown`, `--force`) and a common
@@ -70,93 +72,27 @@ python felinepaw_tool.py tag feline --proxy off
 > 90% 的用户可以跳过这一节——除非你改了 Clash 的默认端口（或用 SS / V2RayN / NekoBox / 其他本地代理）。
 > 默认走 `http://127.0.0.1:7897`（Clash / Clash Verge / mihomo 混合端口），改法同上。
 
-## 🆘 Startup failed? / 启动失败？
+## 🆘 Something broke? / 出问题了？
 
-> If you double-clicked `启动.bat` and saw a wall of Chinese error text, the most common cause is a misconfigured Python. Two steps to fix it.
+Kept short on purpose. The full guide — startup failures, missing modules, `PYTHON_EXE`,
+proxy errors, rate limits, and how to file a bug — lives in **[`TROUBLESHOOTING.md`](TROUBLESHOOTING.md)**.
 
-### Step 1: read the last line / 看报错最关键的一行
+> 这一节故意留短。完整排错手册在 **[`TROUBLESHOOTING.md`](TROUBLESHOOTING.md)**：
+> 启动失败、依赖缺失、`PYTHON_EXE` 配置、代理报错、限速，以及怎么报 bug。
 
-| Error sample / 报错样例 | Meaning / 含义 | Fix / 修法 |
-|---|---|---|
-| `'python' is not recognized` | System can't find `python.exe` | Go to §Step 2, set `PYTHON_EXE` |
-| `ModuleNotFoundError: No module named 'requests'` | Python found, but the dep is missing | `pip install requests` (and `lxml` if you use e-hentai / FA / WildDream) |
-| `DLL load failed while importing _tkinter` | Conda env lacks tkinter | `conda install -n YOUR_ENV tk` |
-| `pythonw.exe not found` | Same as "python not found" | Same as above |
-| No error, but the window flashes and disappears | Silent-launcher self-check failed | Run `启动.bat` once directly (it pauses on failure) |
+The five rows below cover most first-run failures / 首次运行踩到的坑基本都在表里：
 
-### `No module named ...` → install the missing package / 依赖没装
+| Symptom / 现象 | Where to look / 去哪查 |
+|---|---|
+| `'python' is not recognized`, `pythonw.exe not found` | [TROUBLESHOOTING §3](TROUBLESHOOTING.md) — set `PYTHON_EXE` |
+| `ModuleNotFoundError: No module named ...` | [TROUBLESHOOTING §2](TROUBLESHOOTING.md) — `python -m pip install requests lxml` |
+| `DLL load failed while importing _tkinter` | [TROUBLESHOOTING §1](TROUBLESHOOTING.md) — `conda install -n YOUR_ENV tk` |
+| Window flashes and disappears | [TROUBLESHOOTING §1](TROUBLESHOOTING.md) — run `启动.bat` from a cmd window |
+| `ProxyError` / `proxy_down` / 403 | [TROUBLESHOOTING §5–6](TROUBLESHOOTING.md) — proxy and site blocks |
 
-Only the **last line** of the traceback matters / 只看最后一行：
-
-```text
-Traceback (most recent call last):
-  File "D:\path\to\felinepaw\sites\e-hentai\EH_scraper_v2.py", line 52, in <module>
-    from lxml import etree
-ModuleNotFoundError: No module named 'lxml'
-```
-
-```bat
-python -m pip install requests lxml          :: lxml is only used by the e-hentai site
-python -m pip install DrissionPage           :: optional: FA cookies / yiff-auto browser variant
-```
-
-| Pitfall / 坑 | Symptom / 现象 | Fix / 怎么办 |
-|---|---|---|
-| `pip install` instead of `python -m pip install` | Same `No module named` after "installing" | With several Pythons, bare `pip` may hit a different one. **Always `python -m pip`** / 电脑有多个 Python 时必须用 `python -m pip` |
-| Installed into the wrong interpreter / 装错解释器 | `python -c "import sys; print(sys.executable)"` prints a path outside the env in the traceback | Run `-m pip install` with that env's own interpreter |
-| Downloads hang → `ReadTimeoutError` | pip spins, then times out | Use a mirror: `-i https://pypi.tuna.tsinghua.edu.cn/simple` |
-| `ImportError: DLL load failed while importing etree` | lxml binary doesn't match your Python | `python -m pip install --force-reinstall lxml`, or `conda install lxml` |
-| `'pip' is not recognized` | pip not on PATH | Use `python -m pip` |
-
-Verify / 装完验证（must print `ok`）：
-
-```bat
-python -c "import requests, lxml; print('ok')"
-```
-
-> ⚠️ **Note the difference / 注意区分**：`启动.bat` only self-checks `import felinepaw_gui`, which needs
-> just `requests` + `tkinter`. So **a missing `lxml` will not stop the window from opening** — it only blows
-> up when you actually run the e-hentai site. If the GUI opens but the log shows
-> `ModuleNotFoundError: No module named 'lxml'`, that's this case.
-> （缺 `lxml` 时窗口照样能开，只在跑 e-hentai 站点时才报错。）
-
-### Step 2: tell the script where your Python is / 让脚本知道你的 Python 在哪
-
-If you already have a Python / conda env (named anything, not just `py39` — `myenv` / `ai` / `work` all work),
-you don't need to rename it — just point the script at its `python.exe` full path.
-
-**Permanent (writes to registry, global) / 永久** — open any cmd, copy-paste the line below (replace the path with your own):
-
-```bat
-:: 1. Find your python.exe first
-where python
-:: Output is like: C:\Users\YOUR_NAME\miniconda3\envs\myenv\python.exe
-
-:: 2. Adapt the line above and paste this into cmd
-setx PYTHON_EXE "C:\Users\YOUR_NAME\miniconda3\envs\myenv\python.exe"
-```
-
-`setx` writes to the registry; **you must reopen any cmd for it to take effect**. Then double-click `启动.bat` again.
-
-**Temporary (current cmd only) / 临时**：
-
-```bat
-set PYTHON_EXE=C:\Users\YOUR_NAME\miniconda3\envs\myenv\python.exe
-启动.bat
-```
-
-### Can't find Python at all? / 实在找不到 Python 在哪？
-
-Open any cmd, type:
-
-```bat
-where python
-```
-
-The **first line** of the output is the full path to `python.exe`. Set it as `PYTHON_EXE` and you're done.
-If `where python` returns nothing, you don't have Python installed — install one:
-- Official: https://www.python.org/downloads/ (✓ check **"Add Python to PATH"**)
-- Or Miniconda: https://docs.conda.io/en/latest/miniconda.html
+> Known defects and their fix status: **[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)**.
+>
+> 已知缺陷与修复状态：**[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)**。
 
 ---
 
@@ -287,7 +223,46 @@ Every field on the form, what it sets, and the one trap worth knowing:
 > bbooru 是个例外 —— 它两种都能做，靠"哪个格子有内容"来区分：标签格有内容 = 按标签下；
 > 标签格空着、目标格有内容 = 当池子下。
 
+### FA credentials / FA 站凭据（选 `fa` 时才出现）
+
+`fa` is the only site that needs a login. Selecting it reveals an **FA login** panel below the
+parameter area; switching to any other site hides it again.
+`fa` 是唯一需要登录态的站点。选中它之后参数区下方会多出 **「FA 登录」** 面板，切到别的站点自动收起。
+
+| Field / 字段 | What it does / 作用 |
+|---|---|
+| 账号 / 密码 | 直接登录用。密码经**环境变量**传给子进程 —— 不进命令行、不进日志框、不进进程列表 |
+| cookie 文件 | 已经用 `FA_get_cookies.py` 导出过 cookie 就填这里；**优先于**账号密码 |
+| 保存账号 | 把上面三项记在本机（项目根的 `.faenv`），下次打开自动填好 |
+
+> **Local build vs. uploaded build / 本地版 vs 上传版**
+> `.faenv` is machine-local (plain-text password, gitignored). A fresh clone has no such file, so the
+> panel starts empty — same behaviour, you just retype the credentials.
+>
+> `.faenv` 是本机专属文件（明文密码，已写进 `.gitignore`）。别人 clone 这个仓库时没有它，
+> 面板就是空的 —— 功能完全一样，只是每次得重填。
+>
+> Hitting FA's captcha (`fa-captcha`)? Run `python sites/furaffinity/FA_get_cookies.py` **in a
+> terminal** once (it opens a real browser so you can solve it by hand), then put the exported
+> `fa_cookies.json` into the cookie field.
+>
+> 撞验证码时，先在**终端**里跑一次这个脚本（会弹真浏览器让你手过），再把导出的 json 填进 cookie 格。
+> 它不能在 GUI 里跑：既要问你账号密码，又要等你操作浏览器。
+>
+> FA sits behind Cloudflare. If a request is met with a browser challenge (the page says
+> "Just a moment..." / "Enable JavaScript and cookies to continue"), the script says so explicitly —
+> that is **not** a password problem, and no cookie juggling will get around it.
+> Run `FA_get_cookies.py` in a real browser once; its exported cookies are what make the
+> requests-based scraping work afterwards.
+>
+> FA 整站在 Cloudflare 后面。如果请求被拦成浏览器验证（页面写着 `Just a moment...` /
+> `Enable JavaScript and cookies to continue`），脚本会直接说明 —— **这不是密码问题**，
+> 换 cookie、换 UA 都没用。用真浏览器跑一次 `FA_get_cookies.py`，导出的 cookie 才是后面
+> requests 抓取能跑通的关键。
+
 ### Scenario 1 — 按标签批量下载（以 rule34.us 为代表）
+
+
 
 The most common job: "give me everything tagged X, on this site".
 
@@ -568,46 +543,38 @@ tick-box window grouped exactly like the CLI numbering, and then downloads only 
 - Scripts contain **no real credentials**. e621 keys come from env vars; FA uses a local cookies file.
 - `fa_cookies.json` and any `config.json` are **sensitive** — never commit them (see `.gitignore`).
 - Downloaded content folders are **not** part of the repo — keep them out of commits.
+- **FA credentials are never passed on the command line.** The GUI hands the password to the child
+  process through the `FA_PASSWORD` environment variable instead, so it does not appear in the log
+  box, in the printed command line, or in the OS process list.
+- `.faenv` holds FA credentials in **plain text** and is gitignored. Treat it like a password file.
 
 > - 脚本里**没有任何真实凭据**。e621 的 key 走环境变量；FA 用本地 cookies 文件。
 > - `fa_cookies.json` 和任何 `config.json` 都是**敏感文件** —— 绝不要提交（见 `.gitignore`）。
 > - 下载的内容文件夹**不属于**仓库 —— 别把它们提交进去。
+> - **FA 的凭据不上命令行。** GUI 把密码通过 `FA_PASSWORD` 环境变量交给子进程，
+>   所以它不会出现在日志框、不会出现在打印出来的命令行里、也不会出现在系统进程列表中。
+> - `.faenv` 里是**明文** FA 凭据，已 gitignore。请把它当密码文件对待。
 
 ## 🐞 Known issues / 已知问题
 
-Found and reproduced while building the sister project **pixivpaw** (a pixiv downloader that
-copies `common.py`). Only **measured** issues are listed here — no speculation.
-Full write-ups live in [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), compiled with the help of the AI
-coding assistant **WorkBuddy** — every finding was reproduced and manually reviewed.
+Every measured defect — symptom, root cause, fix and how it was verified — is catalogued in
+**[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)**, with its status and the files it touched. Only
+**reproduced** issues are listed there; no speculation.
 
-> 这些问题是做姊妹项目 **pixivpaw**（一个拷贝了 `common.py` 的 pixiv 下载器）时发现并复现的。
-> 这里只列**实测过**的问题，不做任何猜测。完整记录在 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)，
-> 借助 AI 编程助手 **WorkBuddy** 整理 —— 每条都经过复现和人工复核。
+> 所有实测过的缺陷（现象、根因、修法、验证方式）都记录在 **[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)**，
+> 附带状态与涉及文件。那里只收**能复现**的问题，不做猜测。
 
-> **Quick scan** — #1 a dead-code patch (removed); #2 e-hentai search needs **cursor paging**,
-> `&page=N` is silently ignored; #3 the unified CLI's site→directory mapping is fixed; #4 `--pick`
-> output filenames keep their **original list index**.
+All eight entries are fixed today. Two are still worth remembering, because they can make old logs
+look like new bugs / 八条目前全部已修，其中两条值得记住 —— 它们会让旧日志看起来像新 bug：
+
+| # | In one line / 一句话 |
+|---|---|
+| **#2** | e-hentai search is **cursor-paged**: `&page=N` is silently ignored, so a `page=N` loop re-fetches page 1 forever |
+| **#4** | `--pick` keeps the **original list index** in filenames; renumbering causes silent skips on resume |
+
+> **#2** e-hentai 搜索是**游标翻页**，`&page=N` 被静默忽略 —— 用 `page=N` 循环会一直重复下第一页。
 >
-> **速览** —— #1 一段死代码补丁（已删除）；#2 e-hentai 搜索必须**游标翻页**，`&page=N` 会被静默忽略；
-> #3 统一入口的站点→目录映射已修；#4 `--pick` 落盘文件名保留**原名单序号**。
-
-| # | Issue | Affects | Status |
-|---|---|---|---|
-| 1 | `_safe_print` was dead code: `str.encode(enc, errors="replace")` can never raise, so its `except (UnicodeEncodeError, LookupError)` branch was unreachable and the wrapper only forwarded the original string. Measured with `PYTHONIOENCODING=gbk` — output was **byte-identical with and without the patch**; the `reconfigure(errors="replace")` lines *above* it are what actually prevent the crash. It also read `sys.stdout.encoding` unguarded, which raises `AttributeError` when stdout is `None` (e.g. a `--noconsole` frozen build). | `sites/BBooru/B_scraper.py`, `sites/hypnohub/H_scraper.py`, `sites/rule34us/R_scraper.py` — three byte-for-byte identical copies | ✅ **Fixed 2026-09-22** — all three copies deleted; `reconfigure(errors="replace")` alone was always sufficient |
-| 2 | **e-hentai search pagination is cursor-based, not page-numbered.** `&page=0`, `&page=5` and `&page=50` returned the **same 25 galleries** (byte-identical gid sequence) — the parameter is silently ignored, so a "paginate by `page=N`" loop re-downloads page 1 forever without erroring. The real cursor is `&next=<gid>` (the last gid on the current page), taken from `<a id="unext">`. Total count comes from `Found about N results`. | `sites/e-hentai/EH_scraper_v2.py` (search mode) | ✅ **Fixed 2026-09-27** — cursor paging implemented; a probe now asserts `page=N` stays a no-op so a future revert gets caught |
-| 3 | **Two site→directory mappings in the unified CLI were wrong**: `ehentai` resolved to `sites/ehentai/` and `fa` to `sites/fa/`, but the actual folders are `sites/e-hentai/` and `sites/furaffinity/`. `python felinepaw_tool.py ehentai ...` therefore died with `[Errno 2] No such file or directory` — the paths never existed. (Running the site scripts directly was unaffected, which is why it went unnoticed.) | `felinepaw_tool.py` — `build_command()` | ✅ **Fixed 2026-09-27** — mapping table corrected (`ehentai → e-hentai`, `fa → furaffinity`); both routes verified end-to-end |
-| 4 | **(Lesson, not a live bug)** After `--pick 2-4`, files must keep their **original list index** (`2.* 3.* 4.*`), not be renumbered from 1. Renumbering makes a later `--pick 5-6` write `1.* 2.*`, which collides with existing files and gets silently skipped by the resume check. Also: the "already exists?" glob must exclude `.part`, or a half-written file permanently blocks its index. | e-hentai pick/resume logic | ✅ Avoided in implementation 2026-09-27 — see [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #4 |
-
-> **表格中文速览**（完整英文记录见上表与 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)）
->
-> 1. **`_safe_print` 是死代码**（已删）—— `str.encode(enc, errors="replace")` 永远不会抛异常，所以它那个 `except` 分支根本走不到；
->    实测加不加都一样。真正防崩的是它上面那几行 `reconfigure(errors="replace")`。它还会在 stdout 为 `None` 时报 `AttributeError`。
-> 2. **e-hentai 搜索翻页是游标式，不是 `page=N`**（已修）—— `&page=0/5/50` 返回同一批 25 个画廊，参数被静默忽略；
->    真正的游标是 `&next=<gid>`（本页最后一个 gid），从 `<a id="unext">` 取。
-> 3. **统一入口的「站点 → 目录」映射写错了**（已修）—— `ehentai` 被映射到 `sites/ehentai/`、`fa` 到 `sites/fa/`，
->    而真实目录是 `sites/e-hentai/` 和 `sites/furaffinity/`，于是直接跑会报 `No such file or directory`。
-> 4. **`--pick` 落盘必须保留原名单序号**（经验教训，非线上 bug）—— 重新编号会让下一次 `--pick` 与已有文件撞名、
->    被续传判定静默跳过；判「已存在」的 glob 还必须排除 `.part`。
+> **#4** `--pick` 落盘保留**原名单序号**，重新编号会让续传静默跳图。
 
 ## ⚠️ Disclaimers / 免责声明
 
@@ -671,8 +638,11 @@ tick the ones you want, then download), and **both a CLI and a GUI** in one fold
 felinepaw/
 ├── common.py               # shared base library / 公共基础库
 ├── KNOWN_ISSUES.md         # verified issues, with repro + suggested fixes / 已复现的问题，含复现步骤与建议修法
+├── TROUBLESHOOTING.md      # startup / dependency / proxy / rate-limit troubleshooting / 排错手册（启动、依赖、代理、限速）
+├── assets/                 # icon + README banner / 图标与封面图
 ├── felinepaw_tool.py       # unified CLI launcher (all sites, whitelist param passthrough) / 统一命令行入口（全站点，白名单参数透传）
 ├── felinepaw_gui.py        # unified tkinter GUI / 统一 tkinter 图形界面
+├── local_creds.py          # machine-local credential shortcut, reads .faenv (gitignored) / 本机凭据快捷通道（读被 gitignore 的 .faenv）
 ├── 启动.bat               # Windows: double-click → GUI (auto-detects Python + import self-check) / Windows 双击启动图形界面（自动定位 Python + 导入自检）
 └── sites/
     ├── e621/               # 5 CLI scripts (tags / page / artist / pool / pool-reversed) / 5 个 CLI 脚本（标签 / 分页 / 画师 / 池子 / 池子反转）

@@ -16,16 +16,29 @@
 
 **索引 / Index**
 
-| ID | 主题 | 严重级别 | 状态 | 最后更新 |
-|---|---|---|---|---|
-| #1 | `_safe_print` 打印兜底为死代码（3 处复制） | 低 | ✅ 已修复 | 2026-09-22 |
-| #2 | e-hentai 搜索分页：`&page=N` 为无效参数 | 高（静默失败） | ✅ 已修复 | 2026-09-27 |
-| #3 | 统一入口的站点→目录映射错误（`ehentai` / `fa`） | 中 | ✅ 已修复 | 2026-09-27 |
-| #4 | `--pick` 落盘文件名不得重新编号 | 高（静默丢图） | ✅ 实现时已规避 | 2026-09-27 |
-| #5 | `safe_name` 未定义 → `NameError`（原 BUGS B1） | 高（必崩） | ✅ 已修复 | 2026-10-18 |
-| #6 | yiff 自动模式 `requests` 未导入（原 BUGS B2） | 中（吞异常） | ✅ 已修复 | 2026-10-18 |
-| #7 | `probe.py` 的 `urlparse` 未导入（原 BUGS B3） | 低 | ✅ 已修复 | 2026-10-18 |
-| #8 | BBooru 用译文当模式身份（原 BUGS B4） | 低（静默回退） | ✅ 已修复 | 2026-10-18 |
+| ID | 主题 | 影响 / Affects | 严重级别 | 状态 | 最后更新 |
+|---|---|---|---|---|---|
+| #1 | `_safe_print` 打印兜底为死代码（3 处复制） | `sites/BBooru/B_scraper.py`、`sites/hypnohub/H_scraper.py`、`sites/rule34us/R_scraper.py` | 低 | ✅ 已修复 | 2026-09-22 |
+| #2 | e-hentai 搜索分页：`&page=N` 为无效参数 | `sites/e-hentai/EH_scraper_v2.py`（搜索模式） | 高（静默失败） | ✅ 已修复 | 2026-09-27 |
+| #3 | 统一入口的站点→目录映射错误（`ehentai` / `fa`） | `felinepaw_tool.py` — `build_command()` | 中 | ✅ 已修复 | 2026-09-27 |
+| #4 | `--pick` 落盘文件名不得重新编号 | e-hentai 的 pick / 续传逻辑 | 高（静默丢图） | ✅ 实现时已规避 | 2026-09-27 |
+| #5 | `safe_name` 未定义 → `NameError`（原 BUGS B1） | `sites/furaffinity/FA_scraper.py:542` | 高（必崩） | ✅ 已修复 | 2026-10-18 |
+| #6 | yiff 自动模式 `requests` 未导入（原 BUGS B2） | `sites/yiff/yiff_auto_scraper.py:210` | 中（吞异常） | ✅ 已修复 | 2026-10-18 |
+| #7 | `probe.py` 的 `urlparse` 未导入（原 BUGS B3） | `felinepaw_auto/probe.py:36` | 低 | ✅ 已修复 | 2026-10-18 |
+| #8 | BBooru 用译文当模式身份（原 BUGS B4） | `sites/BBooru/gui/app.py:429` | 低（静默回退） | ✅ 已修复 | 2026-10-18 |
+
+**速览 / Quick scan** —— 每条一句话，细节点进对应小节：
+
+- **#1** `_safe_print` 是死代码（已删）—— `str.encode(enc, errors="replace")` 永远不会抛异常，它那个
+  `except` 分支根本走不到；实测加不加输出都一样。真正防崩的是它上面几行 `reconfigure(errors="replace")`。
+- **#2** e-hentai 搜索翻页是**游标式**，`&page=N` 被静默忽略（`page=0/5/50` 返回同一批 25 个画廊）；
+  真正的游标是 `&next=<gid>`。
+- **#3** 统一入口的「站点 → 目录」映射曾写错（`ehentai` → `sites/ehentai/`），直接跑会
+  `No such file or directory`。
+- **#4** `--pick` 落盘必须保留**原名单序号**，重新编号会让下一次 `--pick` 撞名并被续传判定静默跳过。
+- **#5–#8** 三处缺失的 `import`（只有真执行才炸，`py_compile` 查不出来）与一处把**界面译文**
+  当模式身份的比较 —— 切英文界面后会静默回退到默认模式。
+
 
 ---
 
