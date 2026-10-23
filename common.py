@@ -45,7 +45,7 @@ DEFAULT_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 # ============================================================
 
 def _fix_proxy_scheme(url: str) -> str:
-    """Windows 注册表里的 https 代理前缀对本地 Clash 类代理是错的，回环地址改成 http。"""
+    """Windows 注册表里的 https 代理前缀对本地回环代理是错的，回环地址改成 http。"""
     low = url.strip().lower()
     if low.startswith("https://"):
         try:
@@ -443,7 +443,7 @@ def check_proxy(proxy: Optional[str] = None, probe_url: Optional[str] = None,
                 attempts: int = PROBE_ATTEMPTS) -> ProxyCheck:
     """发包前的链路预检——目的只有一个字：**快**。
 
-    没预检时，"Clash 没启动"的表现是**卡很久再丢一个 `ProxyError`**
+    没预检时，"代理没启动"的表现是**卡很久再丢一个 `ProxyError`**
     （连接层重试 × 指数退避）。预检把它压成 **TCP 探一下（≤2.5s）+ 不重试的 GET**，
     典型 1 秒多就有结论，而且能**说清是哪一段坏**（端口 / 隧道 / 目标站）。
 
@@ -454,10 +454,10 @@ def check_proxy(proxy: Optional[str] = None, probe_url: Optional[str] = None,
       ok_proxy_no_url  走代理，端口通（未做 HTTP 探测）
       ok_direct        没配代理，直连（境外网络 / TUN 模式）
       ok_direct_no_url 没配代理，直接放行
-    ★ proxy_down       代理端口没人监听 → **Clash 没启动**
-      proxy_bad        端口通但过不去目标站 → 节点/订阅问题（不是 Clash 没开）
+    ★ proxy_down       代理端口没人监听 → **代理软件没开，或端口填错**
+      proxy_bad        端口通但过不去目标站 → 节点/订阅问题（不是软件没开）
       no_proxy_blocked 没配代理且直连不通（境内默认就是这个）
-    ★ bad_proxy_url    `--proxy` 填的东西解析不出主机名
+    ★ bad_proxy_url    `--proxy` 填的东西解析不出主机名，或用了不支持的 SOCKS
     """
     t0 = time.time()
 
@@ -468,11 +468,25 @@ def check_proxy(proxy: Optional[str] = None, probe_url: Optional[str] = None,
 
     # ---------- 配了代理 ----------
     if p:
+        # SOCKS 必须在这里就拦掉。requests 只把代理串原样交给 urllib3，自己不解释
+        # SOCKS：没装 PySocks 时它抛的是 `InvalidSchema: Missing dependencies for
+        # SOCKS support.`，会被下面那层 `except Exception` 吞成 proxy_bad，然后
+        # 提示"换个节点"—— 完全指错方向（节点再换也还是这条报错）。
+        if p.lower().startswith(("socks4://", "socks4a://", "socks5://",
+                                 "socks5h://", "socks://")):
+            return done(False, "bad_proxy_url",
+                        "不支持 SOCKS 代理：%s" % p,
+                        "本工具的代理走 HTTP。请在代理客户端里打开「HTTP 端口」或"
+                        "「混合端口」（Clash 叫 mixed port、v2rayN 是 http 端口），"
+                        "把那个端口填进 --proxy。\n"
+                        "      或者 `pip install \"requests[socks]\"` 装上 SOCKS 支持后重试。\n"
+                        "      境外网络能直连的话，也可以用 `--proxy off`。")
+
         host, port = _split_hostport(p)
         if not host:
             return done(False, "bad_proxy_url",
                         "代理地址解析不出主机名：%r" % p,
-                        "检查 --proxy，形如 http://127.0.0.1:7897；'off' = 直连，'auto' = 自动检测。")
+                        "检查 --proxy，形如 http://127.0.0.1:<端口>；'off' = 直连，'auto' = 自动检测。")
 
         alive, why = _tcp_probe(host, port)
         if not alive:
@@ -485,10 +499,11 @@ def check_proxy(proxy: Optional[str] = None, probe_url: Optional[str] = None,
                            % PROBE_TCP_TIMEOUT)
             return done(False, "proxy_down",
                         "代理端口 %s:%d 连不上 —— %s" % (host, port, detail),
-                        "**Clash 没启动**。双击 Clash Verge 图标启动，"
-                        "再用 `python clash.py status` 确认。\n"
-                        "      如果你其实是 TUN 模式直接上网、根本不需要 HTTP 代理，"
-                        "改用 `--proxy off`。")
+                        "**代理软件没在运行，或者端口填错了**。\n"
+                        "      先确认你的代理客户端（Clash / v2rayN / NekoBox / Surge 等）"
+                        "确实开着，再到它的设置里核对 HTTP / 混合端口是不是 %d。\n"
+                        "      如果走的是 TUN / 全局模式、本来就不需要 HTTP 代理，"
+                        "改用 `--proxy off`。" % port)
 
         if not probe_url:
             return done(True, "ok_proxy_no_url",
@@ -516,7 +531,7 @@ def check_proxy(proxy: Optional[str] = None, probe_url: Optional[str] = None,
                 last = "%s: %s" % (type(e).__name__, str(e)[:80])
         return done(False, "proxy_bad",
                     "代理端口通，但访问 %s 失败（已试 %d 次）：%s" % (probe_url, attempts, last),
-                    "这是**节点/订阅**的问题，不是 Clash 没开。换个节点再试。\n"
+                    "这是**节点 / 订阅**的问题，不是代理软件没开。换个节点再试。\n"
                     "      预检没过**仍会继续跑**（万一只是瞬时抖动）；真想中止按 Ctrl-C。")
 
     # ---------- 没配代理（直连） ----------
@@ -533,8 +548,10 @@ def check_proxy(proxy: Optional[str] = None, probe_url: Optional[str] = None,
             last = "%s" % type(e).__name__
     return done(False, "no_proxy_blocked",
                 "没配代理，直连 %s 失败（已试 %d 次）：%s" % (probe_url, attempts, last),
-                "这个站点在境内通常需要代理。加 `--proxy http://127.0.0.1:7897`"
-                "（或让它自动检测）再试。\n"
+                "直连不通。**如果你在中国大陆**，这些站点通常需要代理 —— "
+                "到代理客户端里找到 HTTP / 混合端口，"
+                "加 `--proxy http://127.0.0.1:<端口>` 再试（留空 = 跟随系统代理）。\n"
+                "      **如果你在境外**，直连本应可用：检查是否有网络限制或 DNS 问题。\n"
                 "      预检没过**仍会继续跑**；真想中止按 Ctrl-C。")
 
 
