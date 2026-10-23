@@ -63,6 +63,21 @@ ZH = {
                  "页码留空=全部；'重新下载' 对 bbooru/hypnohub/rule34us/e-hentai 生效；"
                  "「挑序号」「只列名单」用于 e-hentai（如 2-4,7；"
                  "搜索模式下标作用于画廊，单画廊模式作用于图片）"),
+
+    # ---------- 界面：FA 凭据面板（仅 site == fa 时出现） ----------
+    "gui_fa_frame": " FA 登录（仅 fa 站需要） ",
+    "gui_fa_user": "账号:",
+    "gui_fa_pass": "密码:",
+    "gui_fa_cookie": "cookie 文件:",
+    "gui_fa_save": "保存账号",
+    "gui_fa_saved": "已保存到：{path}\n（明文保存，只在本机生效，不会上传）",
+    "gui_fa_save_empty": "账号、密码、cookie 都还是空的，没什么可保存。",
+    "gui_fa_loaded": "已载入上次保存的账号",
+    "gui_fa_hint": ("账号和密码可以保存下来，下次打开自动填好 —— 明文存在本机，不会上传。"
+                    "遇到验证码时，先用 sites/furaffinity/FA_get_cookies.py 导出 cookie，再填进上面一格。"),
+    "gui_fa_guide1": "fa 站需要登录：在下方「FA 登录」填账号和密码，或指定 cookie 文件。",
+    "gui_fa_guide2": "不填就点「开始」，FA 会拒绝下载。",
+    "gui_dlg_cookie_file": "选择 cookie 文件",
     "gui_start": "▶ 开始",
     "gui_stop": "■ 停止",
     "gui_idle": "空闲",
@@ -280,6 +295,24 @@ EN = {
                  "empty page = all pages; 'Re-download' applies to bbooru/hypnohub/rule34us/e-hentai; "
                  "'Pick index' and 'List only' are for e-hentai (e.g. 2-4,7; "
                  "in search mode the index picks galleries, in single-gallery mode it picks images)"),
+
+    # ---------- GUI: FA credentials panel (only shown for site == fa) ----------
+    "gui_fa_frame": " FA login (site fa only) ",
+    "gui_fa_user": "Username:",
+    "gui_fa_pass": "Password:",
+    "gui_fa_cookie": "Cookie file:",
+    "gui_fa_save": "Save account",
+    "gui_fa_saved": "Saved to: {path}\n(stored in plain text, this machine only, never uploaded)",
+    "gui_fa_save_empty": "Username, password and cookie file are all empty - nothing to save.",
+    "gui_fa_loaded": "Loaded the saved account",
+    "gui_fa_hint": ("You can save the username and password and they will be filled in next time - "
+                    "stored in plain text on this machine only, never uploaded. If you hit a captcha, "
+                    "run sites/furaffinity/FA_get_cookies.py to export cookies and put that file in the "
+                    "field above."),
+    "gui_fa_guide1": "site fa needs a login: fill in the username and password below, or point at a "
+                     "cookie file.",
+    "gui_fa_guide2": "Starting without either will be rejected by FA.",
+    "gui_dlg_cookie_file": "Select cookie file",
     "gui_start": "▶ Start",
     "gui_stop": "■ Stop",
     "gui_idle": "Idle",

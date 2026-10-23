@@ -21,6 +21,40 @@ ZH_FA = {
     "fa_prompt_password": "FA 密码: ",
     "fa_err_no_drissionpage": "未找到 DrissionPage。请先激活装了 DrissionPage 的 conda 环境（示例：conda activate py39）",
 
+    # ---------- 非交互环境（GUI 起的子进程）----------
+    # 这些是**给人看**的文案：不提 stdin / EOF / traceback / gitignore 这类实现细节，
+    # 只说"缺什么"和"怎么办"。技术原因记在 BUGS.md 的 B10。
+    "fa_err_no_tty": "FA（FurAffinity）需要登录才能下载。请先提供账号，方法任选一种：",
+    "fa_err_no_tty_hint": "  · 界面里填：站点选 fa → 下方「FA 凭据」填账号和密码 → 再点「开始」\n"
+                          "  · 用 cookie：在命令行窗口运行 sites/furaffinity/FA_get_cookies.py 导出"
+                          " fa_cookies.json，\n"
+                          "    再把导出文件填进「FA 凭据」的 cookie 文件一格\n"
+                          "  · 命令行：加 --user 账号 --pass 密码，或 --cookies 指定 cookie 文件\n"
+                          "已经填了账号还看到这句？多半是密码不对，或者被 FA 的验证码挡住了。",
+    "fa_getcookie_no_tty": "这个脚本只能在命令行窗口里运行：它需要你输入账号密码，"
+                           "还会打开浏览器等你完成验证码。",
+
+    # ---------- FA_get_cookies.py：浏览器出口 / 人机验证 ----------
+    # 这几条解释「为什么导出的 cookie 拿回去还是用不了」。只讲现象和下一步，不写实现细节。
+    "fa_browser_proxy": "浏览器将通过 {proxy} 访问 FA，与下载脚本走同一个出口。",
+    "fa_browser_direct": "浏览器直连（没有用代理）。如果下载脚本走代理，导出的文件可能用不上 —— "
+                         "两边的出口必须一致。",
+    "fa_proxy_dead": "代理 {proxy} 连不上。请先打开 Clash；如果你本来就不想用代理，"
+                     "加 --proxy off 重跑，并让下载脚本也加 --proxy off。",
+    "fa_challenge_in_browser": "浏览器停在了人机验证页面。请在窗口里点一下通过验证，"
+                               "脚本会继续等你 —— 不用关窗口，也不用重开。",
+    "fa_cookies_expiry_hint": "这个文件里的通行证和「当前节点 + 浏览器版本」绑定，"
+                              "换节点或隔一段时间后要重新导出一次。",
+
+    "fa_err_cloudflare": "FA 现在要求浏览器验证（Cloudflare 人机检测），脚本被挡在门外 —— "
+                         "这不是账号密码的问题。",
+    "fa_err_cloudflare_hint": "请先运行 sites/furaffinity/FA_get_cookies.py：它会打开真浏览器帮你过掉"
+                              "验证并导出 fa_cookies.json，再把该文件填进「FA 登录」的 cookie 文件一格"
+                              "（命令行用 --cookies）。换个代理节点有时也能绕过。"
+                              "刚导出过还是这句？说明通行证过期或中途换过节点，重新导一次就行。",
+    "fa_creds_loaded": "使用已保存的账号（无需重新输入）。",
+    "fa_cookie_from_creds": "使用 cookie 文件: {path}",
+
     # ---------- FA_scraper.py：登录 ----------
     "fa_logging_in": "正在登录 furaffinity.net ...",
     "fa_login_rejected": "登录被拒（FA 返回错误码）。",
@@ -153,6 +187,44 @@ EN_FA = {
     "fa_prompt_username": "FA username: ",
     "fa_prompt_password": "FA password: ",
     "fa_err_no_drissionpage": "DrissionPage not found. Please activate a conda environment that has DrissionPage installed (e.g. conda activate py39)",
+
+    # ---------- non-interactive environment (child process launched by the GUI) ----------
+    # User-facing copy: no stdin / EOF / traceback / gitignore jargon - only "what is missing"
+    # and "what to do". The technical write-up lives in BUGS.md (B10).
+    "fa_err_no_tty": "FA (FurAffinity) requires a login before it will download anything. "
+                     "Provide an account in one of these ways:",
+    "fa_err_no_tty_hint": "  - In the app: set Site to fa, fill in Username and Password under "
+                          "\"FA credentials\", then press Start\n"
+                          "  - With cookies: run sites/furaffinity/FA_get_cookies.py in a command prompt "
+                          "to export fa_cookies.json,\n"
+                          "    then point the \"Cookie file\" field at it\n"
+                          "  - On the command line: add --user NAME --pass PASSWORD, or --cookies FILE\n"
+                          "Already filled in an account and still seeing this? The password is probably "
+                          "wrong, or FA is showing you a captcha.",
+    "fa_getcookie_no_tty": "This script only runs in a command prompt: it asks for your credentials "
+                           "and opens a browser window so you can solve the captcha.",
+
+    # ---------- FA_get_cookies.py: browser egress / human check ----------
+    "fa_browser_proxy": "The browser will reach FA through {proxy} - the same exit as the downloader.",
+    "fa_browser_direct": "The browser is going direct (no proxy). If the downloader uses a proxy the "
+                         "exported file may not work - both sides must share one exit.",
+    "fa_proxy_dead": "Cannot reach the proxy at {proxy}. Start Clash first; if you really want no proxy, "
+                     "rerun with --proxy off and give the downloader --proxy off as well.",
+    "fa_challenge_in_browser": "The browser is sitting on the human check page. Click through it in the "
+                               "window - the script keeps waiting, no need to close or restart it.",
+    "fa_cookies_expiry_hint": "The pass inside this file is tied to the current node and browser version, "
+                              "so export it again after switching nodes or waiting a while.",
+
+    "fa_err_cloudflare": "FA is behind a browser challenge (Cloudflare) and is turning the request "
+                         "away - this is not a password problem.",
+    "fa_err_cloudflare_hint": "Run sites/furaffinity/FA_get_cookies.py first: it opens a real browser, "
+                              "lets you pass the challenge and exports fa_cookies.json - then point the "
+                              "\"Cookie file\" field at it (or use --cookies on the command line). "
+                              "Switching to another proxy node sometimes gets around it too. "
+                              "Exported it just now and still seeing this? The pass expired or the node "
+                              "changed - export again.",
+    "fa_creds_loaded": "Using the saved account (no prompt).",
+    "fa_cookie_from_creds": "Using cookie file: {path}",
 
     # ---------- FA_scraper.py: login ----------
     "fa_logging_in": "Logging in to furaffinity.net ...",

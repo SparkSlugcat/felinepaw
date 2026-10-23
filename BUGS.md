@@ -33,6 +33,7 @@
 | B7 | 已发布的 exe 未重打包 | 待发布 | `BBooruDownloader.exe` / `E621Downloader.exe` | ⬜ 下次发版 |
 | B8 | `felinepaw_auto` 未双语化 | 低 | 该工具全部输出 | ⬜ 有意跳过 |
 | B9 | `爬虫项目/scraper/` 是旧快照 | 低 | 非仓库目录 | ⬜ 待决定 |
+| B10 | GUI 选 fa 必炸：无凭据入口 + `input()` 读到 EOF | 高（死路） | felinepaw GUI → FA | ✅ 已修 2026-10-23 → #10 |
 
 ---
 
@@ -321,3 +322,79 @@ felinepaw_auto/probe.py            导入 OK | 有 urlparse   ? False
 
 模块**能正常导入**，说明这不是循环依赖或语法问题 —— 纯粹的"用了一个不存在的名字"，
 所以 `python -m py_compile` 和任何语法检查都抓不到，只有真正执行到那一行才炸。
+
+---
+
+## B10 GUI 选 `fa` 必炸：没有凭据入口 + `input()` 读到 EOF（高，已修 2026-10-23）
+
+| 字段 | 内容 |
+|---|---|
+| **状态** | ✅ 已修 2026-10-23 |
+| **影响范围** | `felinepaw_gui.py` / `sites/furaffinity/FA_scraper.py` / `sites/furaffinity/FA_get_cookies.py` |
+| **触发条件** | GUI 里站点选 `fa`，填作品 URL，点「开始」 |
+| **后果（修前）** | 日志区出现 `FA 用户名:` 加一坨 `EOFError: EOF when reading a line` traceback，exit 1 |
+
+**根因（三层，缺一不可）**
+
+1. `felinepaw_gui.py` 的 `_start()` 把 `"cookies": None` 写死，`ns` 里连 `user` / `password` 都没有
+   → `build_command` 永远传不出 `--user/--pass/--cookies`。**GUI 里根本没有 FA 凭据入口。**
+2. `FA_scraper.py` 没凭据就 `input()` 交互式要账号密码。
+3. `启动.bat` 用 `start "" pythonw.exe` 起界面，GUI 起子进程时 `sys.executable` 还是 **pythonw**
+   → 子进程 stdin 读到 EOF → `input()` 抛 `EOFError`。
+   ⚠️ 若只缺密码（用户名从环境变量拿到了），`input_password()` 走 `msvcrt.getwch()`
+   **不报错、直接卡死** —— 比抛异常更难查。
+
+**修法**
+
+- 新增 `local_creds.py`：本机凭据快捷通道，读项目根 `.faenv`（明文、已 gitignore）。
+  优先级 `命令行参数 > 环境变量 > .faenv`。
+- `FA_scraper.py` / `FA_get_cookies.py`：交互前先判 `stdin_is_interactive()`，
+  为假就打印三条出路 + `sys.exit(2)`，**不再抛 traceback，也不再卡死**。
+- `felinepaw_gui.py`：加「FA 登录」面板（账号 / 密码 / cookie 文件 / 保存账号），
+  只在 `site == fa` 时 pack 出来；选 fa 时日志区打引导。
+  **密码走 `FA_PASSWORD` 环境变量传子进程**，不进 argv（否则会被
+  `self._log(">>> " + " ".join(cmd))` 明文打进日志框，也会出现在进程列表里）。
+- 中英双语词条分别落在 `i18n.py`（`gui_fa_*`）与 `i18n_sites_fa.py`（`fa_err_no_tty*` 等）。
+
+**复现（修前）/ 验收（修后）**
+
+```python
+# 用 pythonw 起子进程，模拟 GUI 的真实环境
+import subprocess, os, sys
+pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+subprocess.run([pyw, "sites/furaffinity/FA_scraper.py", "<任意 view URL>"],
+               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+```
+
+修前：`[!] EOFError EOF when reading a line` + traceback
+修后：三段「方法任选一种」引导 + `exit 2`（无 traceback）
+
+⚠️ 文案另有一轮返工：初版直接写的是实现细节（stdin / EOF / traceback / gitignore / exit code），
+那是给开发者看的，用户读不懂也不关心。现在只说「缺什么」和「怎么办」，技术原因留在本文档里。
+
+**未覆盖**：这次没验到「真的登录成功 → 抓到图」这条正路。
+
+**原因已查清（2026-10-23 20:35，Clash 开启后复测）**：FA 在 Cloudflare 后面，本机这条出口
+对所有请求都下发 **Managed Challenge**：
+
+```
+status 403 | Server: cloudflare | cf-mitigated: challenge
+<title>Just a moment...</title>
+正文：Enable JavaScript and cookies to continue
+```
+
+首页、登录页、作品页**全都 403**，所以这跟作品 ID 真假、跟账号密码**都无关** ——
+是纯 requests 过不了人机挑战。
+
+> 过程复盘：我先前只拿**一个随手编的作品 ID** 试了一次就写成「本机访问不了 FA」，
+> 那个结论当时站不住（可能是 ID 不存在）；现在有了首页/登录页的对照，结论才立得住，
+> 但**原因**跟当时说的不是一回事：不是"IP 被拉黑"，是 Cloudflare 挑战。
+
+**因此新增**：`cloudflare_challenge(resp)` 检测（`cf-mitigated: challenge` / `Just a moment...` /
+`Enable JavaScript and cookies to continue`），在取作品页和登录页两处都拦一道，
+命中就打印「这是浏览器验证，不是账号密码问题」+ 引导去用 `FA_get_cookies.py`（exit 2），
+而不是让用户对着 `403 Client Error` 去查作品是不是被删了。
+
+**对技术路线的影响**：在这类节点上，**FA 的 requests 路线不可能通**，
+`FA_get_cookies.py`（DrissionPage 真浏览器）不是"备选"，是**唯一可行入口**。
+这也解释了为什么这个项目一开始就带着那个脚本。

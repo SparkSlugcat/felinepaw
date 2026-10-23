@@ -22,6 +22,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import common  # noqa: E402  （读本机默认输出目录 .pawout）
 import i18n  # noqa: E402
+import local_creds  # noqa: E402  （本机凭据快捷通道 .faenv；该数据文件不进仓库）
 import felinepaw_tool as tool
 
 SITES = ["e621", "e926", "yiff", "ehentai", "fa", "bbooru", "wilddream", "hypnohub", "rule34us"]
@@ -32,7 +33,7 @@ BBOORU_MODES = ["auto", "api", "html", "artist"]
 class FelinepawGUI:
     def __init__(self, root: tk.Tk):
         self.root = root
-        root.geometry("780x620")
+        root.geometry("780x700")
         self.queue = queue.Queue()
         self.proc = None
         self._status_key = "gui_idle"
@@ -62,6 +63,17 @@ class FelinepawGUI:
         self.status_var = tk.StringVar(value=i18n.t("gui_idle"))
         self.lang_var = tk.StringVar(value=i18n.LANG_NAMES[0 if i18n.get_lang() == "zh" else 1])
 
+        # ---- FA 凭据（只在 site == fa 时露出来）----
+        # 本机有 .faenv 就先填好 —— 这就是"本地快捷通道"：
+        # 上传版没有这个文件，面板永远是空的，行为完全一样。
+        creds = local_creds.load_fa_creds()
+        self.fa_user_var = tk.StringVar(value=creds.get("username", ""))
+        self.fa_pass_var = tk.StringVar(value=creds.get("password", ""))
+        self.fa_cookie_var = tk.StringVar(value=creds.get("cookie_file", ""))
+        self._fa_prefilled = bool(creds.get("username") or creds.get("password")
+                                  or creds.get("cookie_file"))
+        self._fa_visible = False          # 面板当前是否已 pack（切站/切语言都要靠它判断）
+
     def _build_lang_bar(self):
         """顶部语言小横条（靠右）：只建一次，重建参数区时不受 pack 顺序影响。"""
         self._lang_bar = ttk.Frame(self.root)
@@ -89,10 +101,11 @@ class FelinepawGUI:
             log_text = self.log_text.get("1.0", "end-1c")
             start_state = str(self.start_btn.cget("state"))
             stop_state = str(self.stop_btn.cget("state"))
-        for name in ("_bar_frame", "_act_frame", "_log_frame"):
+        for name in ("_fa_frame", "_bar_frame", "_act_frame", "_log_frame"):
             w = getattr(self, name, None)
             if w is not None:
                 w.destroy()
+        self._fa_visible = False          # 面板刚被销毁重建，肯定没 pack 出来
 
         self.root.title(i18n.t("gui_app_title"))
         self.lang_label.config(text=i18n.t("gui_lang_label"))
@@ -161,6 +174,38 @@ class FelinepawGUI:
                   ).grid(row=7, column=0, columnspan=4, padx=8, pady=(0, 4), sticky="w")
         bar.columnconfigure(1, weight=1)
 
+        # ===== FA 凭据面板 =====
+        # 单独一个 LabelFrame，而不是往 bar 里加行：只有 site == fa 时才 pack 出来，
+        # 其它站点整块不占地方 —— 也不会让人以为"用 e621 也要填账号"。
+        fa = ttk.LabelFrame(self.root, text=i18n.t("gui_fa_frame"))
+        self._fa_frame = fa
+
+        ttk.Label(fa, text=i18n.t("gui_fa_user")).grid(
+            row=0, column=0, padx=(8, 2), pady=6, sticky="e")
+        ttk.Entry(fa, textvariable=self.fa_user_var, width=22).grid(
+            row=0, column=1, sticky="w", pady=6)
+        ttk.Label(fa, text=i18n.t("gui_fa_pass")).grid(
+            row=0, column=2, padx=(14, 2), pady=6, sticky="e")
+        # show="*"：密码不以明文留在屏幕上（虽然它是 StringVar，只在内存里）
+        ttk.Entry(fa, textvariable=self.fa_pass_var, width=22, show="*").grid(
+            row=0, column=3, sticky="w", pady=6)
+
+        ttk.Label(fa, text=i18n.t("gui_fa_cookie")).grid(
+            row=1, column=0, padx=(8, 2), pady=6, sticky="e")
+        ttk.Entry(fa, textvariable=self.fa_cookie_var, width=32).grid(
+            row=1, column=1, columnspan=2, sticky="we", pady=6)
+        fa_btns = ttk.Frame(fa)
+        fa_btns.grid(row=1, column=3, sticky="w", padx=4, pady=6)
+        ttk.Button(fa_btns, text=i18n.t("gui_browse"),
+                   command=self._pick_cookie_file).pack(side="left")
+        ttk.Button(fa_btns, text=i18n.t("gui_fa_save"),
+                   command=self._save_fa_creds).pack(side="left", padx=(6, 0))
+
+        ttk.Label(fa, text=i18n.t("gui_fa_hint"), foreground="gray",
+                  wraplength=740, justify="left").grid(
+            row=2, column=0, columnspan=4, padx=8, pady=(0, 6), sticky="w")
+        fa.columnconfigure(1, weight=1)
+
         act = ttk.Frame(self.root)
         self._act_frame = act
         act.pack(fill="x", padx=10, pady=4)
@@ -189,6 +234,7 @@ class FelinepawGUI:
         self.stop_btn.config(state=stop_state)
         self.status_var.set(i18n.t(self._status_key, **self._status_kw))
         self._refresh_mode_options()
+        self._sync_fa_panel()      # 切语言重建后，按当前站点决定 FA 面板要不要露出来
 
     def _set_status(self, key, **kw):
         """状态栏文案记成 (key, 参数)，切语言重建时能原样重译。"""
@@ -218,12 +264,64 @@ class FelinepawGUI:
         else:
             self.start_btn.config(state="normal")
             self._set_status("gui_idle")
+        # FA 需要登录态：把凭据面板露出来，并在日志里说清"要填什么、不填会怎样"
+        if site == "fa":
+            self._log(i18n.t("gui_fa_guide1"))
+            self._log(i18n.t("gui_fa_guide2"))
+            if self._fa_prefilled:
+                self._log(i18n.t("gui_fa_loaded"))
         self._refresh_mode_options()
+        self._sync_fa_panel()
+
+    def _sync_fa_panel(self):
+        """按当前站点显示/收起「FA 凭据」面板。
+
+        用 pack / pack_forget 而不是把控件设成 disabled：不该看到的东西就别占地方。
+        `before=self._act_frame` 是必须的 —— 后 pack 的控件默认排到最后，
+        不收这个参数的话面板会跑到「开始/停止」按钮下面去。
+        """
+        frame = getattr(self, "_fa_frame", None)
+        if frame is None or not frame.winfo_exists():
+            return
+        need = self.site_var.get() == "fa"
+        if need and not self._fa_visible:
+            frame.pack(fill="x", padx=10, pady=(0, 8), before=self._act_frame)
+            self._fa_visible = True
+        elif not need and self._fa_visible:
+            frame.pack_forget()
+            self._fa_visible = False
 
     def _pick_dir(self):
         d = filedialog.askdirectory(title=i18n.t("gui_choose_output_dir"))
         if d:
             self.out_var.set(d)
+
+    def _pick_cookie_file(self):
+        f = filedialog.askopenfilename(
+            title=i18n.t("gui_dlg_cookie_file"),
+            filetypes=[("JSON / cookie", "*.json *.txt"), ("*", "*.*")])
+        if f:
+            self.fa_cookie_var.set(f)
+
+    def _save_fa_creds(self):
+        """把当前三项写进本机 `.faenv`。
+
+        这是**本机专属**动作：只写磁盘上那份 gitignore 过的文件，不碰任何仓库内容。
+        """
+        u = self.fa_user_var.get().strip()
+        p = self.fa_pass_var.get().strip()
+        c = self.fa_cookie_var.get().strip()
+        if not (u or p or c):
+            messagebox.showwarning(i18n.t("gui_tip_title"), i18n.t("gui_fa_save_empty"))
+            return
+        try:
+            path = local_creds.save_fa_creds(username=u, password=p, cookie_file=c)
+        except OSError as e:
+            messagebox.showerror(i18n.t("gui_param_error"), str(e))
+            return
+        self._fa_prefilled = True
+        messagebox.showinfo(i18n.t("gui_tip_title"), i18n.t("gui_fa_saved", path=path))
+        self._log(i18n.t("gui_fa_saved", path=path))
 
     def _log(self, msg):
         self.queue.put(str(msg))
@@ -265,7 +363,9 @@ class FelinepawGUI:
             "output": self.out_var.get().strip() or None,
             "limit": self.limit_var.get().strip() or None,
             "proxy": self.proxy_var.get().strip() or None,
-            "workers": None, "delay": None, "cookies": None,
+            "workers": None, "delay": None,
+            # FA 的 cookie 文件可以走命令行（路径不算敏感），账号密码走环境变量，见下面
+            "cookies": self.fa_cookie_var.get().strip() or None,
             "jitter": None, "cooldown": None, "force": self.force_var.get(),
             "no_preflight": False,
             "dry_run": self.dry_var.get(),
@@ -283,6 +383,16 @@ class FelinepawGUI:
         self._log(">>> " + " ".join(cmd))
         env = dict(os.environ)
         env[i18n.LANG_ENV] = i18n.get_lang()
+        # ⚠️ FA 的账号密码**不走命令行**，走环境变量。两个原因：
+        #   ① 下面这行 `self._log(">>> " + " ".join(cmd))` 会把整条命令打进日志框，
+        #      密码以 --pass 传就会被明文展示在界面上（还可能被用户截图/贴出去）；
+        #   ② 命令行参数在任务管理器/进程列表里是可见的。
+        # FA_scraper.py 本来就读 FA_USERNAME/FA_PASSWORD，这里直接塞进去即可。
+        if site == "fa":
+            if self.fa_user_var.get().strip():
+                env["FA_USERNAME"] = self.fa_user_var.get().strip()
+            if self.fa_pass_var.get().strip():
+                env["FA_PASSWORD"] = self.fa_pass_var.get().strip()
         self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                      text=True, encoding="utf-8", errors="replace", bufsize=1,
                                      cwd=str(HERE), env=env)

@@ -8,6 +8,9 @@ config.json
 fa_cookies.json
 *_cookies.json
 *.env
+# 本机凭据快捷通道（FA 账号/密码），由 local_creds.py 读写。
+# ⚠️ 这是「本地版 vs 上传版」的分界线：这个文件只存在于本机，别人克隆不到。
+.faenv
 
 # 打包/构建产物
 dist/

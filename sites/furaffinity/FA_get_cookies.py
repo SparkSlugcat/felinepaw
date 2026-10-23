@@ -3,29 +3,34 @@
 """
 FA cookies 获取器（浏览器模式）
 ==============================================
-FA 登录页含 JS 验证码（fa-captcha），纯 requests 登录会被拦截。
-本脚本用 DrissionPage 打开真实浏览器：
+FA 登录页含 JS 验证码（fa-captcha），而且整站挂在 Cloudflare 后面。
+纯 requests 这两关都过不去，所以本脚本用 DrissionPage 打开真实浏览器：
   1. 自动填好用户名/密码
-  2. 如出现验证码，请你在浏览器窗口里手动完成
+  2. 如出现验证码 / 人机验证，请你在浏览器窗口里手动完成
   3. 登录成功后自动导出 cookies 到 fa_cookies.json
+
+⚠️ 三个「必须一致」—— 只要有一项对不上，导出的 cookie 拿回去照样被 Cloudflare 挡：
+  · 出口 IP   浏览器和 FA_scraper.py 必须走同一个代理（本脚本默认 7897）
+  · User-Agent 浏览器被强制成 FA_scraper.py 里那个 UA
+  · 时效      cf_clearance 这个通行证有有效期，换节点 / 隔久了要重新导出
 
 之后运行 FA_scraper.py 时加 --cookies fa_cookies.json 即可跳过登录。
 
 用法（推荐用 py39 环境）：
-    conda activate py39
-    python FA_get_cookies.py
-    按提示输入用户名/密码（密码以 * 显示）
-    -> 浏览器打开 FA 登录页，完成验证码（如有）
-    -> 自动导出 fa_cookies.json
+    python FA_get_cookies.py                        # 代理走 7897（默认）
+    python FA_get_cookies.py --proxy off            # 下载脚本也直连时用这个
+    python FA_get_cookies.py --proxy http://127.0.0.1:7890
 
 依赖：DrissionPage（py39 环境已装）+ Edge/Chrome
 """
 
+import argparse
 import json
-import re
+import socket
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 _HERE = Path(__file__).resolve().parent
 _ENV = _HERE.parent / "_dsp_env"          # 备用依赖目录（如存在）
@@ -36,6 +41,7 @@ for _p in (_HERE.parent.parent, _HERE.parent, _HERE):
         sys.path.insert(0, str(_p))
         break
 import i18n
+import local_creds        # 本机凭据快捷通道（.faenv；不进仓库）
 
 try:
     from DrissionPage import ChromiumOptions, ChromiumPage
@@ -46,6 +52,55 @@ except ImportError:
     else:
         print(i18n.t("fa_err_no_drissionpage"))
         sys.exit(1)
+
+SITE_LOGIN = "https://www.furaffinity.net/login/"
+
+#: 本机 Clash 的混合端口。--proxy 不给就用它；给了 off/none 才直连。
+DEFAULT_PROXY = "http://127.0.0.1:7897"
+
+#: 兜底 UA —— 正常情况下从 FA_scraper.py 取，保证两边报同一个版本号。
+_FALLBACK_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+
+
+def scraper_ua() -> str:
+    """取 FA_scraper.py 用的那个 User-Agent。
+
+    Cloudflare 发的 `cf_clearance` 绑定「出口 IP + User-Agent」。
+    浏览器报一个版本号、requests 报另一个，cookie 立刻作废并重新下发挑战，
+    所以这里直接把下载端的 UA 借过来，让浏览器也用同一个。
+    """
+    try:
+        from FA_scraper import HEADERS as _H
+        return _H.get("User-Agent") or _FALLBACK_UA
+    except Exception:
+        # 导入失败（路径/依赖问题）不该挡住取 cookie —— 退回同一份字面量
+        return _FALLBACK_UA
+
+
+def proxy_reachable(proxy: str, timeout: float = 1.5) -> bool:
+    """代理端口有没有在监听。纯 TCP，不发 HTTP 请求。"""
+    try:
+        u = urlparse(proxy if "://" in proxy else "http://" + proxy)
+        host, port = u.hostname, u.port or 7897
+        if not host:
+            return False
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def looks_challenged(page) -> bool:
+    """浏览器这一页是不是停在 Cloudflare 人机验证上。"""
+    try:
+        title = (page.title or "").lower()
+        if "just a moment" in title:
+            return True
+        body = (page.html or "")[:3000].lower()
+        return ("enable javascript and cookies" in body) or ("cf-mitigated" in body)
+    except Exception:
+        return False
 
 
 def input_password(prompt: str = i18n.t("fa_prompt_password")) -> str:
@@ -78,12 +133,66 @@ def input_password(prompt: str = i18n.t("fa_prompt_password")) -> str:
     return "".join(pwd)
 
 
-def main():
-    username = input(i18n.t("fa_prompt_username")).strip()
-    password = input_password(i18n.t("fa_prompt_password"))
+def stdin_is_interactive() -> bool:
+    """能不能安全地问用户要输入。
 
+    本脚本是**终端专用**的：它既问账号密码，又会弹一个真实浏览器等用户手过验证码。
+    被当成 GUI 子进程起来（pythonw、stdin 已 EOF）时必须立刻说清楚，
+    而不是抛 `EOFError` 让用户对着一坨 traceback 发呆 —— 更糟的是
+    `input_password()` 走 msvcrt.getwch()，那种环境下**不报错、直接卡死**。
+    """
+    try:
+        return sys.stdin is not None and sys.stdin.isatty()
+    except (ValueError, OSError):
+        return False
+
+
+def build_browser(proxy: str) -> ChromiumOptions:
+    """把浏览器配置成「和下载脚本同一个出口、同一个 UA」。"""
     co = ChromiumOptions()
     co.set_argument("--no-sandbox")
+    # Cloudflare 会看 navigator.webdriver；这一条让自动化特征没那么刺眼
+    co.set_argument("--disable-blink-features=AutomationControlled")
+
+    if proxy:
+        if proxy_reachable(proxy):
+            co.set_argument("--proxy-server", proxy)
+            print(i18n.t("fa_browser_proxy", proxy=proxy))
+        else:
+            # 代理没开就别硬设 —— 设了浏览器连首页都打不开，报错会莫名其妙
+            print(i18n.t("fa_proxy_dead", proxy=proxy))
+    else:
+        print(i18n.t("fa_browser_direct"))
+
+    co.set_user_agent(scraper_ua())
+    return co
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="用真实浏览器过 Cloudflare 验证并导出 FA cookies")
+    parser.add_argument("--proxy", default=DEFAULT_PROXY,
+                        help="浏览器走的代理，默认 %s；写 off 表示直连" % DEFAULT_PROXY)
+    args = parser.parse_args()
+    raw = (args.proxy or "").strip()
+    proxy = "" if raw.lower() in ("off", "none", "") else raw
+
+    # 本机快捷通道优先：.faenv 里已有账号密码就不用再打一遍
+    creds = local_creds.load_fa_creds()
+    username = creds.get("username") or ""
+    password = creds.get("password") or ""
+    if username and password:
+        print(i18n.t("fa_creds_loaded"))
+    else:
+        if not stdin_is_interactive():
+            print(i18n.t("fa_getcookie_no_tty"))
+            sys.exit(2)
+        if not username:
+            username = input(i18n.t("fa_prompt_username")).strip()
+        if not password:
+            password = input_password(i18n.t("fa_prompt_password"))
+
+    co = build_browser(proxy)
     edge = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
     chrome = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
     if Path(edge).exists():
@@ -94,8 +203,13 @@ def main():
     print(i18n.t("fa_opening_browser"))
     page = ChromiumPage(co)
     try:
-        page.get("https://www.furaffinity.net/login/")
+        page.get(SITE_LOGIN)
         time.sleep(3)
+
+        # Cloudflare 挑战是「等你动手」的页面，得先告诉用户点一下，
+        # 否则他会看着一个白屏发呆，以为脚本卡死了。
+        if looks_challenged(page):
+            print(i18n.t("fa_challenge_in_browser"))
 
         # 自动填写用户名/密码
         try:
@@ -147,6 +261,8 @@ def main():
             json.dump(cookies, f, ensure_ascii=False, indent=2)
         print(i18n.t("fa_cookies_saved", path=out))
         print(i18n.t("fa_cookies_next_hint", n=len(cookies)))
+        # 通行证有时效，且和「节点 + 浏览器版本」绑定 —— 不说清他下次会以为是脚本坏了
+        print(i18n.t("fa_cookies_expiry_hint"))
     finally:
         try:
             page.quit()

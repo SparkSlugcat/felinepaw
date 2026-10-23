@@ -63,6 +63,7 @@ for _p in (os.path.dirname(os.path.dirname(_here)), os.path.dirname(_here), _her
         break
 import common
 import i18n
+import local_creds          # 本机凭据快捷通道（.faenv；不进仓库，见 local_creds.py）
 # 共享函数别名
 create_session = common.create_session
 sanitize_filename = common.sanitize_filename
@@ -72,6 +73,23 @@ parse_limit = common.parse_limit
 # ============================================================
 # 登录
 # ============================================================
+
+def stdin_is_interactive() -> bool:
+    """能不能安全地向用户要输入。
+
+    ⚠️ 这是 GUI 场景的地雷（2026-10-23 实测）：
+       `启动.bat` 用 `start "" pythonw.exe` 起界面，GUI 再起本脚本时**也是 pythonw**，
+       子进程的 stdin 一读就 EOF —— `input()` 抛 `EOFError: EOF when reading a line`，
+       用户只在日志里看到一坨 traceback，完全不知道要干什么。
+       更糟的是 `input_password()` 走 msvcrt.getwch()，那种情况下**不报错、直接卡死**。
+
+    所以任何交互之前都必须先问这一句，答"否"就走非交互分支（打印引导 + 退出）。
+    """
+    try:
+        return sys.stdin is not None and sys.stdin.isatty()
+    except (ValueError, OSError):        # 句柄被关掉时 isatty() 会抛
+        return False
+
 
 def input_password(prompt: str = i18n.t("fa_prompt_password")) -> str:
     """输入密码：每个字符显示为 *，便于发现输错后修改；回车确认。
@@ -106,6 +124,26 @@ def input_password(prompt: str = i18n.t("fa_prompt_password")) -> str:
     return "".join(pwd)
 
 
+def cloudflare_challenge(resp) -> bool:
+    """这一页是不是 Cloudflare 的人机挑战页。
+
+    实测（2026-10-23，py39 + Clash 7897）：FA 整站在 Cloudflare 后面，出口 IP 一旦被
+    判定可疑就下发 Managed Challenge —— HTTP 403、响应头 `cf-mitigated: challenge`、
+    标题 `Just a moment...`、正文只有一句 `Enable JavaScript and cookies to continue`。
+    连**首页**和**登录页**都会中招，跟作品 ID 存不存在无关。
+
+    这种页面必须由真浏览器执行 JS 才能过，requests 换 cookie / 换 UA 都没用。
+    → 所以它既不是"账号密码错"，也不是"作品不存在"，不能让人去查这两件事。
+    """
+    if resp is None or resp.status_code not in (403, 503):
+        return False
+    if (resp.headers.get("cf-mitigated") or "").lower() == "challenge":
+        return True
+    head = (resp.text or "")[:2000].lower()
+    return ("just a moment" in head and "cloudflare" in head) or \
+           "enable javascript and cookies" in head
+
+
 def login(session: requests.Session, username: str, password: str) -> bool:
     """登录 FA，成功返回 True。
 
@@ -116,6 +154,10 @@ def login(session: requests.Session, username: str, password: str) -> bool:
     print(i18n.t("fa_logging_in"))
     try:
         r = session.get(SITE + "/login/", timeout=20)
+        if cloudflare_challenge(r):
+            print(i18n.t("fa_err_cloudflare"))
+            print(i18n.t("fa_err_cloudflare_hint"))
+            return False
         r.raise_for_status()
         # 检测验证码
         has_captcha = "fa-captcha" in r.text or "captcha-container" in r.text
@@ -464,6 +506,14 @@ def main():
     # ---------- 1. 作品信息（游客也能拿到标题） ----------
     try:
         title, artist, _ = fetch_view_info(session, view_id)
+    except requests.HTTPError as e:
+        # Cloudflare 挑战要单独说 —— 否则用户会照着 403 去查"作品是不是被删了"
+        if cloudflare_challenge(getattr(e, "response", None)):
+            print(i18n.t("fa_err_cloudflare"))
+            print(i18n.t("fa_err_cloudflare_hint"))
+            sys.exit(2)
+        print(i18n.t("fa_err_fetch_page", e=e))
+        sys.exit(1)
     except requests.RequestException as e:
         print(i18n.t("fa_err_fetch_page", e=e))
         sys.exit(1)
@@ -473,16 +523,30 @@ def main():
     print(i18n.t("fa_submission_title", title=title))
 
     # ---------- 2. 登录（画廊项标题和图片都需要登录态） ----------
-    if args.cookies:
-        if not load_cookies(session, args.cookies):
+    # 凭据优先级：命令行参数 > 环境变量 > 本机 .faenv（见 local_creds.py）
+    creds = local_creds.load_fa_creds()
+    if creds.get("username") or creds.get("password"):
+        print(i18n.t("fa_creds_loaded"))
+
+    cookie_path = args.cookies or creds.get("cookie_file") or ""
+    if cookie_path:
+        if not args.cookies:
+            print(i18n.t("fa_cookie_from_creds", path=cookie_path))
+        if not load_cookies(session, cookie_path):
             sys.exit(1)
     else:
-        username = args.user or os.environ.get("FA_USERNAME", "")
-        password = args.password or os.environ.get("FA_PASSWORD", "")
-        if not username:
-            username = input(i18n.t("fa_prompt_username")).strip()
-        if not password:
-            password = input_password(i18n.t("fa_prompt_password"))
+        username = args.user or creds.get("username") or ""
+        password = args.password or creds.get("password") or ""
+        if not (username and password):
+            if not stdin_is_interactive():
+                # 非交互环境（GUI 子进程）—— 别抛 traceback，直接说清楚怎么办
+                print(i18n.t("fa_err_no_tty"))
+                print(i18n.t("fa_err_no_tty_hint"))
+                sys.exit(2)
+            if not username:
+                username = input(i18n.t("fa_prompt_username")).strip()
+            if not password:
+                password = input_password(i18n.t("fa_prompt_password"))
         if not login(session, username, password):
             sys.exit(1)
 
