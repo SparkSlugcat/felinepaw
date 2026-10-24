@@ -12,10 +12,13 @@ FA 没有"池"概念，官方也没有 API。本脚本借鉴 FA Webcomic Auto Lo
 
 用法：
     # 登录并识别系列后打印结果，不下载
-    python FA_scraper.py https://www.furaffinity.net/view/65703734/ --dry-run
+    python FA_scraper.py https://www.furaffinity.net/view/12345678/ --dry-run
 
     # 正常下载整个系列（按提示输入账号密码）
-    python FA_scraper.py https://www.furaffinity.net/view/65703734/ -o ./study_session
+    python FA_scraper.py https://www.furaffinity.net/view/12345678/ -o ./out
+
+    # 下一个作者的整个画廊，按作品名分目录
+    python FA_scraper.py someartist -o ./out
 
     # 用环境变量提供凭据，或命令行参数
     set FA_USERNAME=xxx & set FA_PASSWORD=yyy
@@ -29,6 +32,7 @@ FA 没有"池"概念，官方也没有 API。本脚本借鉴 FA Webcomic Auto Lo
 """
 
 import argparse
+import difflib
 import getpass
 import json
 import os
@@ -144,6 +148,41 @@ def cloudflare_challenge(resp) -> bool:
            "enable javascript and cookies" in head
 
 
+class SiteOffline(RuntimeError):
+    """整站下线 —— 不是网络错，也不是没权限，等人家修好再来。"""
+
+
+def site_offline(resp) -> bool:
+    """这一页是不是 FA 自己的「全站维护中」占位页。
+
+    实测（2026-10-24）：FA 因 PHP 漏洞（PHP2Shell / CVE-2026-109618）全站下线，
+    **任意** URL 都返回 HTTP 403 + 同一张 1917 字节的 `FA is temporarily offline!`
+    静态页（`Server: cloudflare`、`Set-Cookie: FA-Cache-Clear=<时间戳>`）。
+
+    关键点：它的状态码也是 403，但**没有** `cf-mitigated` 头 —— 和上面那种人机挑战
+    长得像、本质完全不同。不区分的话会被当成"画廊是空的"或"你没有权限"，
+    让人白白去换节点、重新导 cookie。
+    """
+    head = (resp.text or "")[:4000].lower()
+    return "temporarily offline" in head or "currently offline" in head
+
+
+def ensure_site_online(session: requests.Session) -> None:
+    """开跑前先戳一下首页：整站下线就直接说清楚并退出。
+
+    放在最前面，是为了让后面所有"抓不到 / 403 / 空画廊"的报错都不会掩盖真正原因。
+    网络本身不通时**不在这里报** —— 那属于代理问题，留给真正的请求去抛。
+    """
+    try:
+        resp = session.get(SITE + "/", timeout=20)
+    except requests.RequestException:
+        return
+    if site_offline(resp):
+        print(i18n.t("fa_site_offline"))
+        print(i18n.t("fa_site_offline_hint"))
+        sys.exit(2)
+
+
 def login(session: requests.Session, username: str, password: str) -> bool:
     """登录 FA，成功返回 True。
 
@@ -214,6 +253,17 @@ def load_cookies(session: requests.Session, path: str) -> bool:
         except Exception:
             continue
     print(i18n.t("fa_cookies_loaded", count=count, path=path))
+    # 浏览器导出的真实 UA 跟着 cookie 一起放在旁边（fa_cookies_ua.txt）。
+    # cf_clearance 绑定「出口 IP + 浏览器 UA」，UA 对不上等于没拿到 cookie。
+    ua_file = Path(path).with_name(Path(path).stem + "_ua.txt")
+    try:
+        ua = ua_file.read_text(encoding="utf-8").strip() if ua_file.exists() else ""
+    except OSError:
+        ua = ""
+    if ua:
+        session.headers["User-Agent"] = ua
+        IMAGE_HEADERS["User-Agent"] = ua
+        print(i18n.t("fa_ua_loaded"))
     return count > 0
 
 
@@ -230,6 +280,35 @@ def parse_view_id(url_or_id: str) -> str:
     if s.isdigit():
         return s
     raise ValueError(i18n.t("fa_err_parse_id", id=url_or_id))
+
+
+def parse_target(url_or_id: str):
+    """把用户输入归类，返回 ("view", 作品id) 或 ("artist", 作者名)。
+
+    四种写法都认：
+        https://www.furaffinity.net/view/12345678/      -> ("view", "12345678")
+        12345678                                        -> ("view", "12345678")
+        https://www.furaffinity.net/gallery/someartist/ -> ("artist", "someartist")
+        someartist                                      -> ("artist", "someartist")
+
+    为什么要分类：作品页只能一张一张扩展（靠标题找同系列），
+    作者页才是一次拿整个画廊的入口。
+    """
+    s = (url_or_id or "").strip()
+    if not s:
+        raise ValueError(i18n.t("fa_err_parse_target", id=url_or_id))
+    m = re.search(r"/view/(\d+)", s)
+    if m:
+        return "view", m.group(1)
+    if s.isdigit():
+        return "view", s
+    m = re.search(r"/(?:gallery|user|favorites)/([A-Za-z0-9_.~\-]+)", s)
+    if m:
+        return "artist", m.group(1)
+    # 剩下的当作者名（FA 用户名只由字母数字和 - _ . ~ 组成）
+    if re.fullmatch(r"[A-Za-z0-9_.~\-]+", s):
+        return "artist", s
+    raise ValueError(i18n.t("fa_err_parse_target", id=url_or_id))
 
 
 def extract_title_from_html(html: str) -> str:
@@ -313,6 +392,9 @@ def crawl_gallery(session: requests.Session, artist: str,
 
     def grab(url):
         resp = session.get(url, timeout=20)
+        # 健康检查过了也可能中途下线 —— 不拦一下就会报成"画廊是空的"
+        if site_offline(resp):
+            raise SiteOffline(url)
         resp.raise_for_status()
         tree = etree.HTML(resp.text)
         found = []
@@ -356,7 +438,15 @@ def crawl_gallery(session: requests.Session, artist: str,
                 items.append((v, t))
             log(i18n.t("fa_gallery_page", path=path, page=page + 1,
                        n=len(batch), total=len(items)))
-            if len(batch) < 24:          # FA 每页约 24 项
+            if not batch:
+                break
+            if not new:
+                # 整页都是见过的 —— 到底了，或者这个页面没在真的翻页。
+                # 实测：/gallery/<user>/scraps/ 会原样返回 gallery 的内容，
+                # 不设这一条就会把整个画廊再抓一遍（几百次无谓请求）。
+                log(i18n.t("fa_page_no_new", path=path, page=page + 1))
+                break
+            if len(batch) < 24:          # FA 每页约 48 项，明显变少说明是末页
                 break
             page += 1
             time.sleep(0.5)
@@ -424,6 +514,96 @@ def extract_part_number(title: str, artist: str = "") -> int:
     return 0
 
 
+def safe_name(text: str, limit: int = 60) -> str:
+    """把标题/系列名变成安全的文件（夹）名。
+
+    比 common.sanitize_filename 多做一件事：把 `.` 换成 `_`。
+    因为 download_submission 是用 with_suffix(".jpg") 补扩展名的，
+    文件名里但凡有个点（"Vol.2 完"），那个点会被当成扩展名分隔符，
+    后半截标题整个丢掉。
+    """
+    s = sanitize_filename(text or "")
+    s = s.replace(".", "_")
+    s = re.sub(r"\s+", " ", s).strip(" _")
+    s = s[:limit].strip(" _")
+    # 标题只有符号（"----"）时给个中性名，否则会造出叫 "----" 的文件
+    if not re.search(r"[A-Za-z0-9\u4e00-\u9fff]", s):
+        return "untitled"
+    return s
+
+
+def _same_series(a: str, b: str) -> bool:
+    """两个归一化标题算不算同一部作品。
+
+    先看前缀（"study session" / "study session extra"），
+    再用字符相似度兜住拼写差异。阈值偏低是有意的：
+    这一层的用途是"把相近的放一起"，多并一组最多是目录名不精确，
+    漏并一组则是同一部漫画被拆散 —— 后者更烦人。
+    """
+    if a == b:
+        return True
+    if not a or not b:
+        return False
+    short, long_ = (a, b) if len(a) <= len(b) else (b, a)
+    if len(short) >= 8 and long_.startswith(short):
+        return True
+    return difflib.SequenceMatcher(None, a, b).ratio() >= 0.86
+
+
+def group_by_series(items, artist: str = ""):
+    """把 [(view_id, title)] 按系列归堆。
+
+    两步：① 用 normalize_title 精确分组；② 把名字相近的组并到一起。
+    返回 [(系列名, [(vid, title, 序号), ...]), ...]
+      组内按序号排（同序号保持画廊顺序），组之间按张数从多到少。
+    """
+    #: 标题里连一个有意义的字符都没有时用的独立前缀
+    SOLO = "\x00solo\x00"
+
+    buckets = {}
+    for vid, title in items:
+        key = normalize_title(title, artist)
+        if not re.search(r"[A-Za-z0-9\u4e00-\u9fff]", key or ""):
+            # 画师常拿 "----" 当分隔线：归一化后只剩空/符号。
+            # 这种不能当系列名 —— 否则几百张互不相干的作品会被并成一组。
+            buckets.setdefault(SOLO + str(vid), []).append(
+                (vid, title, extract_part_number(title, artist)))
+            continue
+        key = re.sub(r"\s+", " ", key).strip()
+        buckets.setdefault(key, []).append(
+            (vid, title, extract_part_number(title, artist)))
+
+    merged = {}
+    reps = []
+    # 大组先落地，小组再往上并 —— 否则一个只有 1 张的组会抢走代表名
+    for key in sorted(buckets, key=lambda k: (-len(buckets[k]), k)):
+        if key.startswith(SOLO):
+            target = key                     # 无标题作品各自独立，不参与合并
+        else:
+            target = next((r for r in reps if _same_series(key, r)), None)
+            if target is None:
+                target = key
+                reps.append(key)
+        merged.setdefault(target, []).extend(buckets[key])
+
+    groups = []
+    for name, members in merged.items():
+        seen, uniq = set(), []
+        for m in members:
+            if m[0] in seen:
+                continue
+            seen.add(m[0])
+            uniq.append(m)
+        numbered = sorted([m for m in uniq if m[2] > 0], key=lambda m: m[2])
+        members = numbered + [m for m in uniq if m[2] == 0]
+        # 独立作品用原始标题当显示名（"----" 之类），反正不会拿它建目录
+        raw = (uniq[0][1].strip() if name.startswith(SOLO) else name) or ""
+        shown = raw if re.search(r"[A-Za-z0-9\u4e00-\u9fff]", raw) else "untitled"
+        groups.append((shown, members))
+    groups.sort(key=lambda g: (-len(g[1]), g[0]))
+    return groups
+
+
 # ============================================================
 # 下载
 # ============================================================
@@ -488,39 +668,47 @@ def main():
     parser.add_argument("--dry-run", action="store_true",
                         help=i18n.t("fa_help_dry_run"))
     parser.add_argument("--just-this", action="store_true", help=i18n.t("fa_help_just_this"))
+    parser.add_argument("--all", dest="all_gallery", action="store_true",
+                        help=i18n.t("fa_help_all"))
     args = parser.parse_args()
 
     try:
-        view_id = parse_view_id(args.url)
+        kind, target = parse_target(args.url)
     except ValueError as e:
         print(e)
         sys.exit(1)
-    print(i18n.t("fa_submission_id", id=view_id))
 
     session = create_session(args.proxy)
     if session.proxies:
         print(i18n.t("fa_proxy_enabled", proxy=list(session.proxies.values())[0]))
     else:
         print(i18n.t("fa_proxy_direct"))
+    ensure_site_online(session)
 
     # ---------- 1. 作品信息（游客也能拿到标题） ----------
-    try:
-        title, artist, _ = fetch_view_info(session, view_id)
-    except requests.HTTPError as e:
-        # Cloudflare 挑战要单独说 —— 否则用户会照着 403 去查"作品是不是被删了"
-        if cloudflare_challenge(getattr(e, "response", None)):
-            print(i18n.t("fa_err_cloudflare"))
-            print(i18n.t("fa_err_cloudflare_hint"))
-            sys.exit(2)
-        print(i18n.t("fa_err_fetch_page", e=e))
-        sys.exit(1)
-    except requests.RequestException as e:
-        print(i18n.t("fa_err_fetch_page", e=e))
-        sys.exit(1)
-    if not title:
-        print(i18n.t("fa_err_no_title"))
-        sys.exit(1)
-    print(i18n.t("fa_submission_title", title=title))
+    title = artist = ""
+    if kind == "view":
+        print(i18n.t("fa_submission_id", id=target))
+        try:
+            title, artist, _ = fetch_view_info(session, target)
+        except requests.HTTPError as e:
+            # Cloudflare 挑战要单独说 —— 否则用户会照着 403 去查"作品是不是被删了"
+            if cloudflare_challenge(getattr(e, "response", None)):
+                print(i18n.t("fa_err_cloudflare"))
+                print(i18n.t("fa_err_cloudflare_hint"))
+                sys.exit(2)
+            print(i18n.t("fa_err_fetch_page", e=e))
+            sys.exit(1)
+        except requests.RequestException as e:
+            print(i18n.t("fa_err_fetch_page", e=e))
+            sys.exit(1)
+        if not title:
+            print(i18n.t("fa_err_no_title"))
+            sys.exit(1)
+        print(i18n.t("fa_submission_title", title=title))
+    else:
+        artist = target
+        print(i18n.t("fa_artist_target", artist=artist))
 
     # ---------- 2. 登录（画廊项标题和图片都需要登录态） ----------
     # 凭据优先级：命令行参数 > 环境变量 > 本机 .faenv（见 local_creds.py）
@@ -529,8 +717,18 @@ def main():
         print(i18n.t("fa_creds_loaded"))
 
     cookie_path = args.cookies or creds.get("cookie_file") or ""
+    from_default = False
+    if not cookie_path:
+        # 兜底：导出脚本（FA_get_cookies.py）就写在它自己旁边，也就是这里。
+        # 有就用，省得用户去 sites\furaffinity\ 子目录里翻路径 —— 找到了还容易填错。
+        _auto = Path(__file__).resolve().parent / "fa_cookies.json"
+        if _auto.exists():
+            cookie_path = str(_auto)
+            from_default = True
     if cookie_path:
-        if not args.cookies:
+        if from_default:
+            print(i18n.t("fa_cookie_auto", path=cookie_path))
+        elif not args.cookies:
             print(i18n.t("fa_cookie_from_creds", path=cookie_path))
         if not load_cookies(session, cookie_path):
             sys.exit(1)
@@ -551,32 +749,56 @@ def main():
             sys.exit(1)
 
     # 登录后重新获取作品信息（作者链接/图片 URL 更准确）
-    try:
-        title, artist, _ = fetch_view_info(session, view_id)
-    except requests.RequestException:
-        pass
-    if not artist:
-        print(i18n.t("fa_err_no_artist"))
-        sys.exit(1)
-    print(i18n.t("fa_artist", artist=artist))
+    if kind == "view":
+        try:
+            title, artist, _ = fetch_view_info(session, target)
+        except requests.RequestException:
+            pass
+        if not artist:
+            print(i18n.t("fa_err_no_artist"))
+            sys.exit(1)
+        print(i18n.t("fa_artist", artist=artist))
 
-    # ---------- 3. 系列识别 ----------
-    series_key = normalize_title(title, artist)
-    if args.just_this:
-        series = [(view_id, title, extract_part_number(title))]
+    # 输入是作者名，或者给了作品但加了 --all —— 都走"整个画廊"这条路
+    artist_mode = (kind == "artist") or args.all_gallery
+
+    # ---------- 3. 决定下哪些 ----------
+    if artist_mode:
+        print(i18n.t("fa_crawling_gallery"))
+        try:
+            items = crawl_gallery(session, artist, include_scraps=True, log=print)
+        except SiteOffline:
+            print(i18n.t("fa_site_offline"))
+            print(i18n.t("fa_site_offline_hint"))
+            sys.exit(2)
+        except requests.RequestException as e:
+            print(i18n.t("fa_err_crawl_gallery", e=e))
+            sys.exit(1)
+        if not items:
+            print(i18n.t("fa_gallery_empty", artist=artist))
+            sys.exit(1)
+        plan = group_by_series(items, artist)
+    elif args.just_this:
+        plan = [(normalize_title(title, artist) or title,
+                 [(target, title, extract_part_number(title, artist))])]
     else:
+        series_key = normalize_title(title, artist)
         print(i18n.t("fa_series_key", name=series_key))
         print(i18n.t("fa_crawling_gallery"))
         try:
             items = crawl_gallery(session, artist, include_scraps=True, log=print)
+        except SiteOffline:
+            print(i18n.t("fa_site_offline"))
+            print(i18n.t("fa_site_offline_hint"))
+            sys.exit(2)
         except requests.RequestException as e:
             print(i18n.t("fa_err_crawl_gallery", e=e))
             sys.exit(1)
-        matched = [(v, t, extract_part_number(t)) for v, t in items
+        matched = [(v, t, extract_part_number(t, artist)) for v, t in items
                    if normalize_title(t, artist) == series_key]
         if not matched:
             print(i18n.t("fa_no_series_match"))
-            matched = [(view_id, title, extract_part_number(title))]
+            matched = [(target, title, extract_part_number(title, artist))]
         # 排序：有编号的按编号，无编号的保持画廊顺序
         with_num = sorted([m for m in matched if m[2] > 0], key=lambda m: m[2])
         without_num = [m for m in matched if m[2] == 0]
@@ -586,33 +808,82 @@ def main():
             if m[0] not in seen_ids:
                 seen_ids.add(m[0])
                 series.append(m)
+        plan = [(series_key or title, series)]
 
-    print(i18n.t("fa_series_total", n=len(series)))
-    for i, (vid, t, num) in enumerate(series, 1):
-        print(i18n.t("fa_series_item", i=i, vid=vid, num=num or "-", title=t))
+    total = sum(len(g[1]) for g in plan)
+    if artist_mode:
+        # 作者可能有上百张，逐条列出来会刷屏 —— 只报"分成几组、每组几张"
+        print(i18n.t("fa_groups_total", n=len(plan), total=total))
+        for gi, (name, members) in enumerate(plan, 1):
+            print(i18n.t("fa_group_line", i=gi, name=name, n=len(members)))
+    else:
+        print(i18n.t("fa_series_total", n=total))
+        for i, (vid, t, num) in enumerate(plan[0][1], 1):
+            print(i18n.t("fa_series_item", i=i, vid=vid, num=num or "-", title=t))
 
     if args.dry_run:
         print(i18n.t("fa_dry_run_done"))
         return
 
     # ---------- 4. 下载 ----------
-    limit = parse_limit(args.limit, len(series))
+    # 作者模式默认全下 —— 输入作者名本身就是"我要这个人全部作品"的意思；
+    # 单作品模式仍按各站点统一语义，不填就只取前 120 个。
+    limit_arg = "inf" if (artist_mode and args.limit is None) else args.limit
+    limit = parse_limit(limit_arg, total)
     if limit is None:
         return
-    series = series[:limit]
-    print(i18n.t("fa_download_plan", n=len(series), workers=args.workers,
-                 delay=args.delay))
 
-    out = Path(args.output) if args.output else Path(sanitize_filename(series_key or title))
-    out.mkdir(parents=True, exist_ok=True)
+    # 按组的顺序、组内的顺序摊平，再截断 —— 这样 --limit 截出来的总是完整的头部几组
+    flat = []
+    for ui, (_name, members) in enumerate(plan):
+        for idx, (vid, t, _num) in enumerate(members, 1):
+            flat.append((ui, vid, t, idx))
+    flat = flat[:limit]
+    print(i18n.t("fa_download_plan", n=len(flat), workers=args.workers,
+                 delay=args.delay))
+    if len(flat) < total:
+        print(i18n.t("fa_limit_hint", rest=total - len(flat)))
+
+    # 作者模式再多套一层作者名：-o 往往是公共下载根目录（GUI 默认就是），
+    # 直接在里面铺几十个系列目录会把它彻底搞乱。
+    if artist_mode:
+        root = (Path(args.output) if args.output else Path(".")) / safe_name(artist)
+    else:
+        root = Path(args.output) if args.output else Path(safe_name(plan[0][0] or title))
+    root.mkdir(parents=True, exist_ok=True)
+
+    # 目录规则：
+    #   作者模式 —— 真系列（>=2 张）各占一个编号目录，单张作品统一收进 _singles，
+    #               免得根目录被几百张互不相干的图淹掉，也不会和专业目录混在一起；
+    #   单作品模式 —— 平铺，不套壳（用户 -o 指的就是这个系列自己的目录）。
+    used = {f[0] for f in flat}
+    dir_of = {}
+    gi = 0
+    for ui, (_name, members) in enumerate(plan):
+        if ui not in used:
+            continue                      # 一张都不下就别建空目录
+        if not artist_mode:
+            d = root
+        elif len(members) >= 2:
+            gi += 1
+            d = root / ("%02d %s" % (gi, safe_name(_name)))
+        else:
+            d = root / "_singles"
+        d.mkdir(parents=True, exist_ok=True)
+        dir_of[ui] = d
 
     lock = threading.Lock()
-    downloaded = failed = skipped = 0
+    downloaded = failed = 0
 
-    def job(idx, vid, t):
-        nonlocal downloaded, failed, skipped
+    def job(ui, vid, t, idx):
+        nonlocal downloaded, failed
         time.sleep(random.uniform(0, args.delay))
-        ok = download_submission(session, vid, out / f"{idx}.jpg", log=print)
+        if artist_mode and len(plan[ui][1]) < 2:
+            # 单张作品没有"组内序号"可讲，用作品号防重名
+            fname = "%s [%s].jpg" % (safe_name(t, 50), vid)
+        else:
+            fname = "%03d %s.jpg" % (idx, safe_name(t, 50))
+        ok = download_submission(session, vid, dir_of[ui] / fname, log=print)
         with lock:
             if ok:
                 downloaded += 1
@@ -620,15 +891,18 @@ def main():
                 failed += 1
 
     with ThreadPoolExecutor(max_workers=args.workers) as executor:
-        futures = [executor.submit(job, i, v, t)
-                   for i, (v, t, _n) in enumerate(series, 1)]
+        futures = [executor.submit(job, u, v, t, i) for u, v, t, i in flat]
         for _ in as_completed(futures):
             pass
 
     print(i18n.t("fa_done_title"))
-    print(i18n.t("fa_summary_series", series=series_key, artist=artist))
+    if artist_mode:
+        print(i18n.t("fa_summary_gallery", groups=len(set(dir_of.values())),
+                     artist=artist))
+    else:
+        print(i18n.t("fa_summary_series", series=plan[0][0], artist=artist))
     print(i18n.t("fa_summary_counts", ok=downloaded, fail=failed))
-    print(i18n.t("fa_saved_to", path=out.resolve()))
+    print(i18n.t("fa_saved_to", path=root.resolve()))
 
 
 if __name__ == "__main__":

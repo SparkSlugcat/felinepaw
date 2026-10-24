@@ -31,13 +31,13 @@ v4（2026-09-02，JSON API 优先 + HTML 兜底）：
     python B_scraper.py --tags "cute fox" --limit inf --threads 12 -o D:/pictures
     python B_scraper.py --tags landscape --mode html --limit 50   # 强制 HTML 兜底模式
     python B_scraper.py --tags landscape --limit 500 --dry-run     # 只收集不下载
-    python B_scraper.py --pool https://bbooru.com/index.php?page=pool&s=show&id=33976
-    python B_scraper.py --pool 33976 --limit 20 -o D:/pics         # pool 也可只给 id
+    python B_scraper.py --pool https://bbooru.com/index.php?page=pool&s=show&id=123456
+    python B_scraper.py --pool 123456 --limit 20 -o D:/pics         # pool 也可只给 id
     # v5 新增
     python B_scraper.py --tags artist_name --mode artist           # Artist 模式
     python B_scraper.py --tags artist_name --mode artist --skip-others  # 跳过不属于pool的
     python B_scraper.py --tags fox --page 2                        # 仅下载第 2 页
-    python B_scraper.py --pool 33976 --pool-rev                    # pool 反转编号
+    python B_scraper.py --pool 123456 --pool-rev                    # pool 反转编号
 """
 
 import os

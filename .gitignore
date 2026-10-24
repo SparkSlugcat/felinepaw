@@ -11,6 +11,10 @@ fa_cookies.json
 # 本机凭据快捷通道（FA 账号/密码），由 local_creds.py 读写。
 # ⚠️ 这是「本地版 vs 上传版」的分界线：这个文件只存在于本机，别人克隆不到。
 .faenv
+# 浏览器身份随 cookie 一起导出（cf_clearance 绑它）
+*_ua.txt
+# 固定浏览器用户目录：里面存着通行证和登录态，等同于凭据
+.fa_profile/
 
 # 打包/构建产物
 dist/
@@ -47,6 +51,9 @@ sites/**/*.webm
 # e-hentai：脚本生成的画廊目录 + 清单文件
 sites/*/eh_*/
 sites/*/eh_manifest.json
+# 任何站点脚本生成的清单（e6_artist_manifest.json 等）—— 里面是真实作者名和作品 ID，
+# 属于运行产物，不是仓库内容
+*_manifest.json
 # BBooru / WildDream：池目录与编号目录
 sites/*/pool_*/
 pool_*/

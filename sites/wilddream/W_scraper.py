@@ -1,7 +1,7 @@
 '''
 下载 WildDream 用户的某个漫画文件夹（等价于一个 pool）
 用法：
-    python W_scraper.py "https://www.wilddream.net/art/userpage/gallery?userpagename=xxx&folderid=485" [--limit 80|inf] [-o 输出根目录] [--threads 8]
+    python W_scraper.py "https://www.wilddream.net/art/userpage/gallery?userpagename=xxx&folderid=123" [--limit 80|inf] [-o 输出根目录] [--threads 8]
 特性：收集满 limit 即停 / -o 建 <漫画名>/ 子文件夹 / 断点续传(.part+原子改名) / 礼貌请求(每线程间隔+超时+重试) / 并发下载(--threads)
 '''
 

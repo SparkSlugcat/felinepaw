@@ -38,14 +38,32 @@ LANG_NAMES = ("中文", "English")
 ZH = {
     # ---------- 界面（felinepaw_gui.py） ----------
     "gui_app_title": "felinepaw 一体化下载器 v0.1",
-    "gui_lang_label": "语言:",
+    # 语言标签故意「反着写」：中文界面显示 Language，英文界面显示 语言。
+    # 因为要找切换开关的人，恰恰是看不懂当前界面语言的人。
+    "gui_lang_label": "Language:",
     "gui_lang_switched": "已切换界面语言：{lang}",
     "gui_params_frame": " 任务参数 ",
     "gui_site": "站点:",
     "gui_mode_e621": "模式(e621):",
     "gui_mode_bbooru": "模式(bbooru):",
     "gui_mode": "模式:",
-    "gui_target_tags": "目标/标签:",
+    "gui_target_url": "目标网址:",
+    # ---- 各站的填写示例（切站时打在日志里 + 常驻在参数区第 7 行）----
+    "gui_ex_disabled": "（灰掉的行在这个站用不上）",
+    "gui_ex_e621_tags": "示例：标签框填 feline solo，目标网址留空。",
+    "gui_ex_e621_page": "示例：标签框填 feline，页码填 2。",
+    "gui_ex_e621_artist": "示例：标签框填作者名，如 tom_fischbach。",
+    "gui_ex_e621_pool": "示例：目标网址填 https://e621.net/pools/12345 或 12345，标签留空。",
+    "gui_ex_e621_poolrev": "示例：同 pool，只是编号倒序。",
+    "gui_ex_yiff": "示例：只填标签，如 feline —— yiff 的入口是标签，不是网址。",
+    "gui_ex_ehentai": "示例：目标网址填 https://e-hentai.org/g/123456/abcdef1234/；"
+                      "或标签框填 language:chinese（两个只填一个）。",
+    "gui_ex_fa": "示例：目标网址填作者名（如 someartist，下他的整个画廊，按作品名分目录）；"
+                 "或者填作品地址 …/view/12345678/ 或编号 12345678（只下这一个系列）。",
+    "gui_ex_bbooru": "示例：标签框填 landscape；或目标网址填合集 123456（两个只填一个）。",
+    "gui_ex_wilddream": "示例：目标网址填画廊地址 "
+                        "https://www.wilddream.net/art/userpage/gallery?userpagename=xxx&folderid=123",
+    "gui_ex_tags_only": "示例：只填标签，如 fox 或 cute dog。",
     "gui_tags": "标签(--tags):",
     "gui_output": "输出目录:",
     "gui_browse": "浏览...",
@@ -77,6 +95,9 @@ ZH = {
                     "遇到验证码时，先用 sites/furaffinity/FA_get_cookies.py 导出 cookie，再填进上面一格。"),
     "gui_fa_guide1": "fa 站需要登录：在下方「FA 登录」填账号和密码，或指定 cookie 文件。",
     "gui_fa_guide2": "不填就点「开始」，FA 会拒绝下载。",
+    "gui_fa_ready": "已找到可用的登录凭据（账号或 cookie），直接点「开始」就行。"
+                    "目标框可以填作者名（下一个人的整个画廊）、作品地址或编号，"
+                    "例如 someartist、12345678 或 https://www.furaffinity.net/view/12345678/。",
     "gui_dlg_cookie_file": "选择 cookie 文件",
     "gui_start": "▶ 开始",
     "gui_stop": "■ 停止",
@@ -95,11 +116,12 @@ ZH = {
     "gui_e926_status": "e926 暂不可用（Cloudflare 拦截）",
     "gui_e926_log1": "⚠️ e926 暂不可用：被 Cloudflare 人机挑战拦截，纯 requests 无法访问。",
     "gui_e926_log2": "   请改用 e621，或用浏览器访问 e926。",
-    "gui_err_need_tags": "请填写标签(--tags)",
-    "gui_err_bbooru_input": "bbooru 需要填标签(--tags)，或在目标框填 pool URL/id",
-    "gui_err_wilddream_gallery": "wilddream 需要画廊 URL（目标框）",
-    "gui_err_site_need_tags": "{site} 需要填标签(--tags)",
-    "gui_err_ehentai_input": "ehentai 需要填画廊 URL（目标框）或标签（--tags）",
+    "gui_err_need_tags": "请填写标签栏",
+    "gui_err_bbooru_input": "bbooru 需要标签框填标签，或目标网址填合集 URL/编号",
+    "gui_err_wilddream_gallery": "wilddream 需要目标网址填画廊地址",
+    "gui_err_site_need_tags": "{site} 只吃标签：请填标签框",
+    "gui_err_ehentai_input": "ehentai 需要目标网址填画廊地址，或标签框填标签",
+    "gui_err_ehentai_both": "标签框和目标网址只能填一个：标签=搜索，网址=单个画廊",
 
     # ---------- 命令行工具（felinepaw_tool.py） ----------
     "tool_desc": "felinepaw 一体化工具：统一调度 e621/yiff/e-hentai/furaffinity/bbooru/wilddream 脚本",
@@ -156,7 +178,7 @@ ZH = {
     "common_help_delay": "每次请求前的基准延时秒数，默认 0（不限速）。被站点限流时试试 --delay 1.0",
     "common_help_jitter": "在基准延时上叠加的随机抖动秒数，默认 0。配合 --delay 用（如 --delay 1 --jitter 1.5）让节奏不像机器",
     "common_help_cooldown": "吃到 429/503 时让所有线程一起安静多少秒，默认 20",
-    "common_help_no_preflight": "跳过发包前的代理预检（默认会先花约 1 秒确认链路，失败时能立刻说清是 Clash 没开还是节点问题）",
+    "common_help_no_preflight": "跳过发包前的代理预检（默认会先花约 1 秒确认链路，失败时能立刻说清是代理没开还是节点问题）",
     "common_pick_dash": "--pick 里的 '-' 两边至少要有一个数字：{part!r}",
     "common_pick_reversed": "--pick 的区间写反了（{start} > {end}）：{part!r}",
     "common_pick_bad": "--pick 看不懂这一段：{part!r}（支持 2-4,7 / 3- / -3 / all）",
@@ -235,7 +257,7 @@ ZH = {
     # 命令行（B_scraper.py --help）
     "bb_cli_desc": "从 bbooru.com 下载原图：--tags 按标签（JSON API 优先），或 --pool 按合集（HTML）",
     "bb_cli_tags": "标签，多个用空格分开，如 'cute fox' 或 landscape（与 --pool 二选一）",
-    "bb_cli_pool": "pool 的 show 页 URL 或纯 id，如 https://bbooru.com/index.php?page=pool&s=show&id=33976 或 33976",
+    "bb_cli_pool": "pool 的 show 页 URL 或纯 id，如 https://bbooru.com/index.php?page=pool&s=show&id=123456 或 123456",
     "bb_cli_mode": "下载引擎: auto=API优先失败自动回退HTML(默认), api=强制API, html=强制HTML, artist=Artist模式(需配合--tags)",
     "bb_cli_limit": "下载数量: 正整数 或 inf(全部)；不填默认只下载前 120 个",
     "bb_cli_adult": "是否包含成人内容（y=是，n=否），默认 y。n 时原图会被站点隐藏",
@@ -270,30 +292,50 @@ ZH = {
 EN = {
     # ---------- 界面 ----------
     "gui_app_title": "felinepaw All-in-One Downloader v0.1",
-    "gui_lang_label": "Language:",
+    # Deliberately flipped: English UI shows 语言, Chinese UI shows Language.
+    # Whoever needs this switch is the person who cannot read the current UI language.
+    "gui_lang_label": "语言:",
     "gui_lang_switched": "Interface language switched to: {lang}",
     "gui_params_frame": " Task Parameters ",
     "gui_site": "Site:",
     "gui_mode_e621": "Mode (e621):",
     "gui_mode_bbooru": "Mode (bbooru):",
     "gui_mode": "Mode:",
-    "gui_target_tags": "Target / tags:",
+    "gui_target_url": "Target URL:",
+    # ---- per-site examples (logged on site switch + shown under the params) ----
+    "gui_ex_disabled": "(greyed rows are unused for this site)",
+    "gui_ex_e621_tags": "Example: tags = feline solo, leave Target URL empty.",
+    "gui_ex_e621_page": "Example: tags = feline, page = 2.",
+    "gui_ex_e621_artist": "Example: tags = the artist name, e.g. tom_fischbach.",
+    "gui_ex_e621_pool": "Example: Target URL = https://e621.net/pools/12345 or 12345, tags empty.",
+    "gui_ex_e621_poolrev": "Example: same as pool, just numbered in reverse.",
+    "gui_ex_yiff": "Example: tags only, e.g. feline - yiff takes tags, not a URL.",
+    "gui_ex_ehentai": "Example: Target URL = https://e-hentai.org/g/123456/abcdef1234/ ; "
+                      "or tags = language:chinese (fill only one).",
+    "gui_ex_fa": "Example: Target URL = artist name (e.g. someartist - whole gallery, one folder "
+                 "per series); or a submission URL .../view/12345678/ or id 12345678 (that series only).",
+    "gui_ex_bbooru": "Example: tags = landscape; or Target URL = pool id 123456 (fill only one).",
+    "gui_ex_wilddream": "Example: Target URL = the gallery address "
+                        "https://www.wilddream.net/art/userpage/gallery?userpagename=xxx&folderid=123",
+    "gui_ex_tags_only": "Example: tags only, e.g. fox or cute dog.",
     "gui_tags": "Tags (--tags):",
     "gui_output": "Output dir:",
     "gui_browse": "Browse...",
     "gui_limit": "Limit:",
     "gui_proxy": "Proxy:",
     "gui_page": "Page (--page):",
-    "gui_skip_others": "artist: skip non-pool posts",
-    "gui_force_pool": "Check all pools",
-    "gui_pool_rev": "Reverse pool order",
-    "gui_force": "Re-download (--force)",
-    "gui_pick": "Pick index (--pick):",
-    "gui_pages": "Max images per gallery (--pages):",
+    # 英文比中文长一截：同一行四个勾选框全用全称，会把整行撑到 600px 宽，
+    # 窗口装不下就把旁边的输入框压扁。这里一律用短称，全称在 --help 里。
+    "gui_skip_others": "Skip non-pool posts",
+    "gui_force_pool": "All pools",
+    "gui_pool_rev": "Reverse order",
+    "gui_force": "Re-download",
+    "gui_pick": "Pick (--pick):",
+    "gui_pages": "Per gallery (--pages):",
     "gui_dry_run": "List only (--dry-run)",
     "gui_hint": ("Tips: empty proxy = auto, off = direct; --limit inf means everything; "
                  "empty page = all pages; 'Re-download' applies to bbooru/hypnohub/rule34us/e-hentai; "
-                 "'Pick index' and 'List only' are for e-hentai (e.g. 2-4,7; "
+                 "'Pick' and 'List only' are for e-hentai (e.g. 2-4,7; "
                  "in search mode the index picks galleries, in single-gallery mode it picks images)"),
 
     # ---------- GUI: FA credentials panel (only shown for site == fa) ----------
@@ -312,6 +354,9 @@ EN = {
     "gui_fa_guide1": "site fa needs a login: fill in the username and password below, or point at a "
                      "cookie file.",
     "gui_fa_guide2": "Starting without either will be rejected by FA.",
+    "gui_fa_ready": "A usable login is already in place (account or cookie) - just hit Start. "
+                    "The target box takes an artist name (whole gallery), a submission URL or an ID - "
+                    "e.g. someartist, 12345678 or https://www.furaffinity.net/view/12345678/.",
     "gui_dlg_cookie_file": "Select cookie file",
     "gui_start": "▶ Start",
     "gui_stop": "■ Stop",
@@ -330,11 +375,12 @@ EN = {
     "gui_e926_status": "e926 unavailable (blocked by Cloudflare)",
     "gui_e926_log1": "⚠️ e926 unavailable: blocked by a Cloudflare human challenge, plain requests cannot access it.",
     "gui_e926_log2": "   Please use e621 instead, or open e926 in a browser.",
-    "gui_err_need_tags": "Tags are required (--tags)",
-    "gui_err_bbooru_input": "bbooru needs tags (--tags), or a pool URL/id in the target field",
-    "gui_err_wilddream_gallery": "wilddream needs a gallery URL (target field)",
-    "gui_err_site_need_tags": "{site} needs tags (--tags)",
-    "gui_err_ehentai_input": "ehentai needs a gallery URL (target field) or tags (--tags)",
+    "gui_err_need_tags": "Fill in the tags box",
+    "gui_err_bbooru_input": "bbooru needs tags in the tags box, or a pool URL/id in Target URL",
+    "gui_err_wilddream_gallery": "wilddream needs a gallery address in Target URL",
+    "gui_err_site_need_tags": "{site} takes tags only: fill the tags box",
+    "gui_err_ehentai_input": "ehentai needs a gallery URL in Target URL, or tags in the tags box",
+    "gui_err_ehentai_both": "Fill only one: tags = search, Target URL = a single gallery",
 
     # ---------- 命令行工具 ----------
     "tool_desc": "felinepaw all-in-one tool: one entry point for the e621/yiff/e-hentai/furaffinity/bbooru/wilddream scripts",
@@ -391,7 +437,7 @@ EN = {
     "common_help_delay": "Base delay in seconds before each request, default 0 (no throttling). Try --delay 1.0 if the site rate-limits you",
     "common_help_jitter": "Random jitter in seconds added to the base delay, default 0. Use it with --delay (e.g. --delay 1 --jitter 1.5) so the pace does not look robotic",
     "common_help_cooldown": "Seconds all threads stay quiet after a 429/503, default 20",
-    "common_help_no_preflight": "Skip the proxy preflight before sending requests (by default about 1 second is spent confirming the link, so failures say clearly whether Clash is not running or the node is bad)",
+    "common_help_no_preflight": "Skip the proxy preflight before sending requests (by default about 1 second is spent confirming the link, so failures say clearly whether the proxy is not running or the node is bad)",
     "common_pick_dash": "In --pick, '-' needs at least one number on either side: {part!r}",
     "common_pick_reversed": "--pick range is reversed ({start} > {end}): {part!r}",
     "common_pick_bad": "Cannot parse this part of --pick: {part!r} (supported: 2-4,7 / 3- / -3 / all)",
@@ -470,7 +516,7 @@ EN = {
     # 命令行（B_scraper.py --help）
     "bb_cli_desc": "Download original images from bbooru.com: --tags by tag (JSON API preferred), or --pool by pool (HTML)",
     "bb_cli_tags": "Tags, separated by spaces, e.g. 'cute fox' or landscape (mutually exclusive with --pool)",
-    "bb_cli_pool": "Pool show-page URL or plain id, e.g. https://bbooru.com/index.php?page=pool&s=show&id=33976 or 33976",
+    "bb_cli_pool": "Pool show-page URL or plain id, e.g. https://bbooru.com/index.php?page=pool&s=show&id=123456 or 123456",
     "bb_cli_mode": "Download engine: auto=API first, fall back to HTML (default), api=force API, html=force HTML, artist=Artist mode (needs --tags)",
     "bb_cli_limit": "How many to download: a positive integer or inf (all); default is the first 120",
     "bb_cli_adult": "Include adult content (y=yes, n=no), default y. With n the originals are hidden by the site",

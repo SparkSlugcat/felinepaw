@@ -8,7 +8,7 @@ e-hentai 画廊下载器 v3
 用法：
 
     # ① 单画廊（v2 老用法，完全兼容）
-    python EH_scraper_v2.py "https://e-hentai.org/g/3817181/3b0370c5a1/"
+    python EH_scraper_v2.py "https://e-hentai.org/g/123456/abcdef1234/"
 
     # ② 标签搜索 + 只看名单（不下载）
     python EH_scraper_v2.py --tags "language:chinese$ female:feline" --limit 30 --dry-run
@@ -433,7 +433,7 @@ def build_parser() -> argparse.ArgumentParser:
         description=i18n.t("eh_desc"),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(i18n.t("eh_epilog_examples") + "\n"
-                '  %(prog)s "https://e-hentai.org/g/3817181/3b0370c5a1/"\n'
+                '  %(prog)s "https://e-hentai.org/g/123456/abcdef1234/"\n'
                 '  %(prog)s --tags "language:chinese$ female:feline" --limit 30 --dry-run\n'
                 '  %(prog)s --tags "language:chinese$" --limit 30 --pick 2-4,7\n'
                 '  %(prog)s --from-manifest eh_manifest.json --pick 2-4,7\n'

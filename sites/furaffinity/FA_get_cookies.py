@@ -11,7 +11,8 @@ FA 登录页含 JS 验证码（fa-captcha），而且整站挂在 Cloudflare 后
 
 ⚠️ 三个「必须一致」—— 只要有一项对不上，导出的 cookie 拿回去照样被 Cloudflare 挡：
   · 出口 IP   浏览器和 FA_scraper.py 必须走同一个代理（本脚本默认 7897）
-  · User-Agent 浏览器被强制成 FA_scraper.py 里那个 UA
+  · 浏览器身份 只能用浏览器**自己的**真实身份；它的 UA 会随 cookie 一起导出，
+              下载脚本照着用（反过来硬改浏览器的 UA 会被判定为机器人）
   · 时效      cf_clearance 这个通行证有有效期，换节点 / 隔久了要重新导出
 
 之后运行 FA_scraper.py 时加 --cookies fa_cookies.json 即可跳过登录。
@@ -34,6 +35,8 @@ from urllib.parse import urlparse
 
 _HERE = Path(__file__).resolve().parent
 _ENV = _HERE.parent / "_dsp_env"          # 备用依赖目录（如存在）
+#: 浏览器用户目录（固定，不随手删）。已经过掉的验证、登录态都存在这里。
+PROFILE_DIR = _HERE / ".fa_profile"
 
 # ---- 定位项目根目录（felinepaw/）并导入 i18n，供下面的提示语使用 ----
 for _p in (_HERE.parent.parent, _HERE.parent, _HERE):
@@ -58,24 +61,19 @@ SITE_LOGIN = "https://www.furaffinity.net/login/"
 #: 本机 Clash 的混合端口。--proxy 不给就用它；给了 off/none 才直连。
 DEFAULT_PROXY = "http://127.0.0.1:7897"
 
-#: 兜底 UA —— 正常情况下从 FA_scraper.py 取，保证两边报同一个版本号。
-_FALLBACK_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+def browser_ua(page) -> str:
+    """读浏览器**自己**报的 User-Agent。
 
+    方向很关键：不是把浏览器的 UA 改成下载脚本的，而是把浏览器的 UA 记下来交给下载脚本。
 
-def scraper_ua() -> str:
-    """取 FA_scraper.py 用的那个 User-Agent。
-
-    Cloudflare 发的 `cf_clearance` 绑定「出口 IP + User-Agent」。
-    浏览器报一个版本号、requests 报另一个，cookie 立刻作废并重新下发挑战，
-    所以这里直接把下载端的 UA 借过来，让浏览器也用同一个。
+    Cloudflare 同时看两个头：`User-Agent` 和 `Sec-CH-UA`（后者由浏览器内核按真实
+    版本号自动生成）。用 `--user-agent` 只改得动前一半，两个头对不上就是典型机器人
+    特征 —— 验证会一直循环，点多少次都过不去。所以浏览器必须保持原样。
     """
     try:
-        from FA_scraper import HEADERS as _H
-        return _H.get("User-Agent") or _FALLBACK_UA
+        return (page.run_js("return navigator.userAgent") or "").strip()
     except Exception:
-        # 导入失败（路径/依赖问题）不该挡住取 cookie —— 退回同一份字面量
-        return _FALLBACK_UA
+        return ""
 
 
 def proxy_reachable(proxy: str, timeout: float = 1.5) -> bool:
@@ -101,6 +99,52 @@ def looks_challenged(page) -> bool:
         return ("enable javascript and cookies" in body) or ("cf-mitigated" in body)
     except Exception:
         return False
+
+
+def wait_login_form(page, timeout: int = 90):
+    """等页面「定型」，返回用户名输入框。
+
+    返回 None 表示页面上压根没有登录表单 —— 要么已经登录（FA 会跳离登录页），
+    要么还卡在人机验证上（调用方自己用 looks_challenged() 区分）。
+
+    为什么要等而不是 sleep 三秒：Cloudflare 挑战过掉之后浏览器会**重载一次页面**，
+    这个时刻填进去的东西会被冲掉。固定 sleep 就是在赌这一下。
+    """
+    end = time.time() + timeout
+    while time.time() < end:
+        try:
+            if not looks_challenged(page):
+                box = page.ele('xpath://input[@name="name"]', timeout=2)
+                if box:
+                    return box
+                if "/login" not in page.url.lower():
+                    return None          # 已经登录、被跳走了
+        except Exception:
+            pass
+        time.sleep(1)
+    return None
+
+
+def fill_login(page, username: str, password: str, tries: int = 3) -> bool:
+    """填账号密码，并**回读核对**真的填进去了。
+
+    `input()` 不抛异常 ≠ 填上了。所以每个字段填完都读一遍 `value`，
+    对不上就重来（重载刚发生的那一两秒最容易碰上）。
+    """
+    fields = (('input[@name="name"]', username), ('input[@name="pass"]', password))
+    for _ in range(tries):
+        try:
+            for xpath, value in fields:
+                box = page.ele("xpath://" + xpath, timeout=5)
+                box.clear()
+                box.input(value)
+            if all((page.ele("xpath://" + x, timeout=2).value or "") == v
+                   for x, v in fields):
+                return True
+        except Exception:
+            pass
+        time.sleep(1)
+    return False
 
 
 def input_password(prompt: str = i18n.t("fa_prompt_password")) -> str:
@@ -164,7 +208,12 @@ def build_browser(proxy: str) -> ChromiumOptions:
     else:
         print(i18n.t("fa_browser_direct"))
 
-    co.set_user_agent(scraper_ua())
+    # ⚠️ 这里**不要**再调 set_user_agent()：见 browser_ua() 的说明。
+    # 浏览器必须用它自己的真实身份，改了就过不了人机验证。
+
+    # 固定用户目录：过掉的通行证、登录态、浏览记录都留到下次。
+    # 每次都用全新临时目录 = 每次都是「零历史的新面孔」，更容易被反复挑战。
+    co.set_user_data_path(str(PROFILE_DIR))
     return co
 
 
@@ -201,33 +250,41 @@ def main():
         co.set_browser_path(chrome)
 
     print(i18n.t("fa_opening_browser"))
-    page = ChromiumPage(co)
+    try:
+        page = ChromiumPage(co)
+    except Exception as e:
+        # 固定用户目录后最常见的原因是「上次的浏览器窗口还开着」，占着同一个目录
+        print(i18n.t("fa_err_browser_start"))
+        print(i18n.t("fa_err_browser_start_hint"))
+        sys.exit(1)
     try:
         page.get(SITE_LOGIN)
-        time.sleep(3)
 
         # Cloudflare 挑战是「等你动手」的页面，得先告诉用户点一下，
         # 否则他会看着一个白屏发呆，以为脚本卡死了。
         if looks_challenged(page):
             print(i18n.t("fa_challenge_in_browser"))
 
-        # 自动填写用户名/密码
-        try:
-            name_box = page.ele('xpath://input[@name="name"]', timeout=10)
-            name_box.input(username)
-            pass_box = page.ele('xpath://input[@name="pass"]', timeout=5)
-            pass_box.input(password)
+        # 等页面定型再动手填 —— 挑战过后浏览器会自己重载一次，
+        # 重载会把刚输进去的内容清空（「提示填好了、实际是空的」就是这么来的）。
+        form = wait_login_form(page)
+        if form is None:
+            if looks_challenged(page):
+                print(i18n.t("fa_err_challenge_stuck"))
+                sys.exit(1)
+            # 固定用户目录里还留着上次的登录态，FA 已经跳离登录页
+            print(i18n.t("fa_already_logged_in"))
+        elif fill_login(page, username, password):
             print(i18n.t("fa_autofill_ok"))
-        except Exception as e:
-            print(i18n.t("fa_autofill_failed", e=e))
-
-        print(i18n.t("fa_captcha_hint"))
-        # 点击登录按钮（若可点击）
-        try:
-            btn = page.ele('xpath://input[@name="login"]', timeout=3)
-            btn.click()
-        except Exception:
-            pass
+            print(i18n.t("fa_captcha_hint"))
+            try:
+                page.ele('xpath://input[@name="login"]', timeout=3).click()
+            except Exception:
+                pass
+        else:
+            # 填不进去就别自动提交，交给用户手动来，别让他以为脚本已经搞定了
+            print(i18n.t("fa_autofill_failed"))
+            print(i18n.t("fa_captcha_hint"))
 
         # 等待登录成功：出现用户链接或跳离登录页
         logged_in = False
@@ -260,6 +317,12 @@ def main():
         with open(out, "w", encoding="utf-8") as f:
             json.dump(cookies, f, ensure_ascii=False, indent=2)
         print(i18n.t("fa_cookies_saved", path=out))
+        # 通行证和「节点 IP + 浏览器 UA」绑定：把浏览器真实 UA 一并存下来，
+        # 下载脚本读到它就会照用，两边报同一个身份。
+        ua = browser_ua(page)
+        if ua:
+            out.with_name(out.stem + "_ua.txt").write_text(ua, encoding="utf-8")
+            print(i18n.t("fa_ua_saved"))
         print(i18n.t("fa_cookies_next_hint", n=len(cookies)))
         # 通行证有时效，且和「节点 + 浏览器版本」绑定 —— 不说清他下次会以为是脚本坏了
         print(i18n.t("fa_cookies_expiry_hint"))

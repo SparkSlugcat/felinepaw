@@ -14,8 +14,8 @@ felinepaw_tool.py — 一体化工具 v1（统一 CLI 分发器）
     python felinepaw_tool.py ehentai "https://e-hentai.org/g/xxx/yyy/" -o ./out
     python felinepaw_tool.py fa "https://www.furaffinity.net/view/xxx/" --cookies fa_cookies.json -o ./out
     python felinepaw_tool.py bbooru --tags landscape -o ./out          # 按标签
-    python felinepaw_tool.py bbooru --pool 33976 --limit 20 -o ./out   # 按合集（show 页 URL 或纯 id）
-    python felinepaw_tool.py wilddream "https://www.wilddream.net/art/userpage/gallery?userpagename=...&folderid=485" -o ./out
+    python felinepaw_tool.py bbooru --pool 123456 --limit 20 -o ./out   # 按合集（show 页 URL 或纯 id）
+    python felinepaw_tool.py wilddream "https://www.wilddream.net/art/userpage/gallery?userpagename=...&folderid=123" -o ./out
 
 通用参数（按站点脚本支持度自动透传）：
     -o/--output  --limit  --proxy  -w/--workers  -d/--delay  --jitter  --cooldown
@@ -56,7 +56,8 @@ WHITELIST = {
     "EH_scraper_v2.py": ["-o", "--limit", "--proxy", "-w", "-d", "--cooldown", "--force",
                          "--no-preflight", "--dry-run", "--pick", "--pages",
                          "--from-manifest", "--manifest"],
-    "FA_scraper.py": ["-o", "--limit", "--proxy", "-w", "-d", "--cookies"],
+    # --dry-run：FA_scraper.py 本身支持，之前漏在白名单外，GUI 勾了也被丢掉
+    "FA_scraper.py": ["-o", "--limit", "--proxy", "-w", "-d", "--cookies", "--dry-run"],
     "B_scraper.py": ["-o", "--limit", "--proxy", "--adult", "--name", "--retry", "--dry-run",
                      "--mode", "--page", "--skip-others", "--pool-rev", "--force-pool-check",
                      "--delay", "--jitter", "--cooldown", "--force", "--no-preflight"],

@@ -42,10 +42,21 @@ ZH_FA = {
     "fa_proxy_dead": "代理 {proxy} 连不上。请先打开 Clash；如果你本来就不想用代理，"
                      "加 --proxy off 重跑，并让下载脚本也加 --proxy off。",
     "fa_challenge_in_browser": "浏览器停在了人机验证页面。请在窗口里点一下通过验证，"
-                               "脚本会继续等你 —— 不用关窗口，也不用重开。",
+                               "脚本会继续等你 —— 不用关窗口，也不用重开。"
+                               "如果反复点都过不去，那多半是这个节点被 Cloudflare 盯上了，"
+                               "换一个节点再试。",
+    "fa_ua_saved": "已记下浏览器的身份标识，下载脚本会自动使用同一个 —— "
+                   "两边报不同身份的话，通行证会被立刻作废。",
+    "fa_ua_loaded": "已套用导出时记录的浏览器身份标识。",
+    "fa_err_browser_start": "浏览器没能启动。",
+    "fa_err_browser_start_hint": "请先关掉所有 Edge / Chrome 窗口再重跑；"
+                                 "如果还是不行，删掉 sites\\furaffinity\\.fa_profile 这个文件夹后重试。",
     "fa_cookies_expiry_hint": "这个文件里的通行证和「当前节点 + 浏览器版本」绑定，"
                               "换节点或隔一段时间后要重新导出一次。",
 
+    "fa_site_offline": "FA 整站下线维护中 —— 这不是你的网络、代理或 cookie 的问题，"
+                       "换节点、重新导 cookie 都没用。",
+    "fa_site_offline_hint": "站点修好会自己恢复；过一阵再跑一次就行。",
     "fa_err_cloudflare": "FA 现在要求浏览器验证（Cloudflare 人机检测），脚本被挡在门外 —— "
                          "这不是账号密码的问题。",
     "fa_err_cloudflare_hint": "请先运行 sites/furaffinity/FA_get_cookies.py：它会打开真浏览器帮你过掉"
@@ -54,6 +65,7 @@ ZH_FA = {
                               "刚导出过还是这句？说明通行证过期或中途换过节点，重新导一次就行。",
     "fa_creds_loaded": "使用已保存的账号（无需重新输入）。",
     "fa_cookie_from_creds": "使用 cookie 文件: {path}",
+    "fa_cookie_auto": "已找到之前导出的 cookie 文件，自动使用: {path}",
 
     # ---------- FA_scraper.py：登录 ----------
     "fa_logging_in": "正在登录 furaffinity.net ...",
@@ -69,9 +81,21 @@ ZH_FA = {
     "fa_cookies_loaded": "已加载 {count} 条 cookies（来源: {path}）",
 
     # ---------- FA_scraper.py：抓取 / 下载 ----------
-    "fa_err_parse_id": "无法解析作品 ID: {id}",
+    "fa_err_parse_id": "「{id}」既不是作品地址，也不是作品编号。"
+                       "请填作品页地址（形如 https://www.furaffinity.net/view/12345678/），"
+                       "或者直接填那串数字。",
+    "fa_err_parse_target": "「{id}」看不出是作品还是作者。可以填：作品的完整地址"
+                           "（…/view/12345678/）、作品编号（12345678）、作者名（如 someartist），"
+                           "或作者的画廊地址（…/gallery/someartist/）。",
+    "fa_gallery_empty": "抓不到 {artist} 的任何作品：画廊是空的，或者这个名字不存在。",
+    "fa_artist_target": "作者: {artist}（将下载整个画廊，并按标题分组）",
+    "fa_groups_total": "\n共 {total} 张，按标题归成 {n} 组：",
+    "fa_group_line": "  [{i:2d}] {name}  —— {n} 张",
+    "fa_summary_gallery": "作者: {artist} | 存进 {groups} 个目录",
+    "fa_limit_hint": "还有 {rest} 张没下（受数量上限限制）。要全部，把数量上限填 inf。",
     "fa_err_gallery_page": "  抓取 {path} 第 {page} 页失败: {e}",
     "fa_gallery_page": "  {path} 第 {page} 页: {n} 项（累计 {total}）",
+    "fa_page_no_new": "  {path} 第 {page} 页没有新内容，停止翻页",
     "fa_skip_exists": "  #{vid} -> {name} 已存在，跳过",
     "fa_err_no_image": "  #{vid} 未取到图片链接（可能未登录或不是图片）",
     "fa_skip_not_image": "  #{vid} 非图片类型(.{ext})，跳过",
@@ -81,8 +105,8 @@ ZH_FA = {
 
     # ---------- FA_scraper.py：命令行 ----------
     "fa_cli_desc": "FurAffinity 系列作品爬虫（登录+系列识别）",
-    "fa_help_url": "作品 URL，例如 https://www.furaffinity.net/view/65703734/",
-    "fa_help_output": "保存目录（默认用系列名命名）",
+    "fa_help_url": "作品地址、作品编号，或作者名 —— 填作者名会下载他的整个画廊",
+    "fa_help_output": "保存目录（默认用作者名 / 系列名）",
     "fa_help_workers": "并发线程数（默认4）",
     "fa_help_delay": "随机延迟上限秒（默认1.0）",
     "fa_help_limit": "下载数量: 正整数 或 inf(全部)；不填默认只下载前 120 个",
@@ -90,8 +114,9 @@ ZH_FA = {
     "fa_help_user": "FA 用户名（或用环境变量 FA_USERNAME）",
     "fa_help_pass": "FA 密码（或用环境变量 FA_PASSWORD；不推荐命令行明文）",
     "fa_help_cookies": "cookies 文件（FA_get_cookies.py 导出），登录被验证码拦截时用这个",
-    "fa_help_dry_run": "登录并识别系列后打印结果，不下载",
+    "fa_help_dry_run": "只列出会下载哪些，不实际下载",
     "fa_help_just_this": "只下载这一张，不找系列",
+    "fa_help_all": "输入是作品时，也下载该作者的整个画廊（按标题分组）",
 
     # ---------- FA_scraper.py：运行期 ----------
     "fa_submission_id": "作品 ID: {id}",
@@ -108,7 +133,7 @@ ZH_FA = {
     "fa_no_series_match": "画廊里没有找到同系列的其他作品（可能只有这一张）。",
     "fa_series_total": "\n系列共 {n} 张:",
     "fa_series_item": "  {i:3d} #{vid} 序号={num}  {title}",
-    "fa_dry_run_done": "\n[dry-run] 系列识别完成，未下载。",
+    "fa_dry_run_done": "\n[dry-run] 识别完成，未下载。",
     "fa_download_plan": "\n下载前 {n} 张（{workers} 线程，延迟 0~{delay}s）",
     "fa_done_title": "\n===== 下载完成 =====",
     "fa_summary_series": "系列: {series} | 作者: {artist}",
@@ -118,7 +143,9 @@ ZH_FA = {
     # ---------- FA_get_cookies.py ----------
     "fa_opening_browser": "正在打开浏览器（请勿关闭窗口）...",
     "fa_autofill_ok": "已自动填写账号密码。",
-    "fa_autofill_failed": "自动填写失败（{e}），请手动填写并点击登录。",
+    "fa_autofill_failed": "自动填写没能生效，请在本窗口手动填一次账号密码再点登录。",
+    "fa_already_logged_in": "浏览器里还留着上次的登录态，已跳过登录，直接导出。",
+    "fa_err_challenge_stuck": "等了两分钟仍停在人机验证上，先退出。换一个节点再试一次。",
     "fa_captcha_hint": "若出现验证码/人机验证，请在本窗口手动完成；登录后脚本会自动保存 cookies ...",
     "fa_waiting_login": "  等待登录完成... ({sec}s)",
     "fa_login_timeout": "等待超时：未能确认登录成功，cookies 未导出。",
@@ -211,10 +238,21 @@ EN_FA = {
     "fa_proxy_dead": "Cannot reach the proxy at {proxy}. Start Clash first; if you really want no proxy, "
                      "rerun with --proxy off and give the downloader --proxy off as well.",
     "fa_challenge_in_browser": "The browser is sitting on the human check page. Click through it in the "
-                               "window - the script keeps waiting, no need to close or restart it.",
+                               "window - the script keeps waiting, no need to close or restart it. "
+                               "If repeated clicks never get through, this node is likely flagged by "
+                               "Cloudflare - try another node.",
+    "fa_ua_saved": "Recorded the browser's identity; the downloader will reuse the same one - "
+                   "two different identities would void the pass immediately.",
+    "fa_ua_loaded": "Using the browser identity recorded at export time.",
+    "fa_err_browser_start": "The browser failed to start.",
+    "fa_err_browser_start_hint": "Close all Edge / Chrome windows and run it again; if that still fails, "
+                                 "delete the sites\\furaffinity\\.fa_profile folder and retry.",
     "fa_cookies_expiry_hint": "The pass inside this file is tied to the current node and browser version, "
                               "so export it again after switching nodes or waiting a while.",
 
+    "fa_site_offline": "Fur Affinity is down for maintenance right now - this is not a network, "
+                       "proxy or cookie problem, so switching nodes or re-exporting cookies won't help.",
+    "fa_site_offline_hint": "The site comes back on its own; just run it again later.",
     "fa_err_cloudflare": "FA is behind a browser challenge (Cloudflare) and is turning the request "
                          "away - this is not a password problem.",
     "fa_err_cloudflare_hint": "Run sites/furaffinity/FA_get_cookies.py first: it opens a real browser, "
@@ -225,6 +263,7 @@ EN_FA = {
                               "changed - export again.",
     "fa_creds_loaded": "Using the saved account (no prompt).",
     "fa_cookie_from_creds": "Using cookie file: {path}",
+    "fa_cookie_auto": "Found a previously exported cookie file, using it automatically: {path}",
 
     # ---------- FA_scraper.py: login ----------
     "fa_logging_in": "Logging in to furaffinity.net ...",
@@ -240,9 +279,21 @@ EN_FA = {
     "fa_cookies_loaded": "Loaded {count} cookies (source: {path})",
 
     # ---------- FA_scraper.py: fetching / downloading ----------
-    "fa_err_parse_id": "Cannot parse the submission ID: {id}",
+    "fa_err_parse_id": "\"{id}\" is neither a submission URL nor a submission ID. "
+                       "Pass the page URL (e.g. https://www.furaffinity.net/view/12345678/) "
+                       "or just the number.",
+    "fa_err_parse_target": "\"{id}\" does not look like a submission or an artist. You can pass a full "
+                           "submission URL (.../view/12345678/), a submission ID (12345678), an "
+                           "artist name (e.g. someartist), or a gallery URL (.../gallery/someartist/).",
+    "fa_gallery_empty": "No works found for {artist}: the gallery is empty, or the name does not exist.",
+    "fa_artist_target": "Artist: {artist} (will download the whole gallery, grouped by title)",
+    "fa_groups_total": "\n{total} item(s) in {n} group(s) by title:",
+    "fa_group_line": "  [{i:2d}] {name}  - {n} item(s)",
+    "fa_summary_gallery": "Artist: {artist} | saved into {groups} folder(s)",
+    "fa_limit_hint": "{rest} item(s) left out by the download cap. Set the limit to inf for everything.",
     "fa_err_gallery_page": "  Failed to fetch page {page} of {path}: {e}",
     "fa_gallery_page": "  {path} page {page}: {n} items ({total} so far)",
+    "fa_page_no_new": "  {path} page {page} had nothing new, stopping",
     "fa_skip_exists": "  #{vid} -> {name} already exists, skipped",
     "fa_err_no_image": "  #{vid} no image link found (not logged in, or not an image)",
     "fa_skip_not_image": "  #{vid} not an image (.{ext}), skipped",
@@ -252,8 +303,8 @@ EN_FA = {
 
     # ---------- FA_scraper.py: command line ----------
     "fa_cli_desc": "FurAffinity series scraper (login + series detection)",
-    "fa_help_url": "Submission URL, e.g. https://www.furaffinity.net/view/65703734/",
-    "fa_help_output": "Output directory (named after the series by default)",
+    "fa_help_url": "Submission URL / ID, or an artist name - an artist name downloads the whole gallery",
+    "fa_help_output": "Output directory (named after the artist / series by default)",
     "fa_help_workers": "Number of worker threads (default 4)",
     "fa_help_delay": "Max random delay in seconds (default 1.0)",
     "fa_help_limit": "How many to download: a positive integer or inf (all); defaults to the first 120",
@@ -261,8 +312,9 @@ EN_FA = {
     "fa_help_user": "FA username (or the FA_USERNAME environment variable)",
     "fa_help_pass": "FA password (or the FA_PASSWORD environment variable; plain text on the command line is discouraged)",
     "fa_help_cookies": "Cookies file (exported by FA_get_cookies.py); use it when login is blocked by a captcha",
-    "fa_help_dry_run": "Log in, detect the series and print the result without downloading",
+    "fa_help_dry_run": "List what would be downloaded without downloading anything",
     "fa_help_just_this": "Download only this submission, do not look for the series",
+    "fa_help_all": "When the input is a submission, download the artist's whole gallery instead (grouped by title)",
 
     # ---------- FA_scraper.py: runtime ----------
     "fa_submission_id": "Submission ID: {id}",
@@ -279,7 +331,7 @@ EN_FA = {
     "fa_no_series_match": "No other works in this series were found in the gallery (there may be only this one).",
     "fa_series_total": "\n{n} item(s) in the series:",
     "fa_series_item": "  {i:3d} #{vid} part={num}  {title}",
-    "fa_dry_run_done": "\n[dry-run] series detection finished, nothing downloaded.",
+    "fa_dry_run_done": "\n[dry-run] done, nothing downloaded.",
     "fa_download_plan": "\nDownloading the first {n} item(s) ({workers} threads, delay 0~{delay}s)",
     "fa_done_title": "\n===== Download complete =====",
     "fa_summary_series": "Series: {series} | Artist: {artist}",
@@ -289,7 +341,9 @@ EN_FA = {
     # ---------- FA_get_cookies.py ----------
     "fa_opening_browser": "Opening the browser (do not close the window)...",
     "fa_autofill_ok": "Username and password filled in automatically.",
-    "fa_autofill_failed": "Auto-fill failed ({e}); please fill in the form and click login manually.",
+    "fa_autofill_failed": "Auto-fill did not take; please type the credentials and click login in the window.",
+    "fa_already_logged_in": "The browser still holds a previous login, so login was skipped and cookies exported directly.",
+    "fa_err_challenge_stuck": "Still stuck on the human check after two minutes, so it stopped here. Try again with another node.",
     "fa_captcha_hint": "If a captcha / human check appears, complete it manually in this window; the script will save the cookies automatically after login ...",
     "fa_waiting_login": "  Waiting for login... ({sec}s)",
     "fa_login_timeout": "Timed out: could not confirm a successful login; cookies were not exported.",

@@ -31,7 +31,7 @@ ZH_MISC = {
     "eh_epilog_examples": "示例:",
     "eh_epilog_note": "--limit / --pick 作用于「当次名单」:\n"
                       "  搜索模式 = 搜出来的画廊;  单画廊模式 = 画廊里的图片\n",
-    "eh_help_url": "画廊 URL，例如 https://e-hentai.org/g/3817181/3b0370c5a1/",
+    "eh_help_url": "画廊 URL，例如 https://e-hentai.org/g/123456/abcdef1234/",
     "eh_help_tags": "标签搜索（与 URL 二选一）。语法: language:chinese$ / female:feline / "
                     "-male:feline / ~feline，空格分隔多个",
     "eh_help_output": "保存目录。留空 = 读项目根 .pawout（无则当前目录）; "
@@ -112,7 +112,7 @@ ZH_MISC = {
     "wd_saved": "已保存: {name}",
     "wd_download_failed": "下载失败: {name} ({err})",
     "wd_desc": "下载 WildDream 用户的某个漫画文件夹",
-    "wd_help_url": "画廊 URL，例如 https://www.wilddream.net/art/userpage/gallery?userpagename=...&folderid=485",
+    "wd_help_url": "画廊 URL，例如 https://www.wilddream.net/art/userpage/gallery?userpagename=...&folderid=123",
     "wd_help_limit": "最多下载张数：数字 或 inf(全部)；默认 80",
     "wd_help_output": "输出根目录（默认当前目录），会在其下建 <漫画名>/ 子文件夹",
     "wd_help_threads": "下载并发线程数，默认 8",
@@ -168,7 +168,7 @@ EN_MISC = {
     "eh_epilog_note": "--limit / --pick apply to the current list:\n"
                       "  search mode = galleries found;  single gallery mode = images "
                       "in the gallery\n",
-    "eh_help_url": "Gallery URL, e.g. https://e-hentai.org/g/3817181/3b0370c5a1/",
+    "eh_help_url": "Gallery URL, e.g. https://e-hentai.org/g/123456/abcdef1234/",
     "eh_help_tags": "Tag search (either this or URL). Syntax: language:chinese$ / "
                     "female:feline / -male:feline / ~feline, space-separated",
     "eh_help_output": "Save directory. Blank = read .pawout in the project root "
@@ -263,7 +263,7 @@ EN_MISC = {
     "wd_saved": "Saved: {name}",
     "wd_download_failed": "Download failed: {name} ({err})",
     "wd_desc": "Download one comic folder of a WildDream user",
-    "wd_help_url": "Gallery URL, e.g. https://www.wilddream.net/art/userpage/gallery?userpagename=...&folderid=485",
+    "wd_help_url": "Gallery URL, e.g. https://www.wilddream.net/art/userpage/gallery?userpagename=...&folderid=123",
     "wd_help_limit": "Max images to download: a number or inf (all); default 80",
     "wd_help_output": "Output root directory (default: current directory); a "
                       "<comic name>/ subfolder is created under it",

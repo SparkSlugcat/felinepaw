@@ -28,7 +28,7 @@ A unified launcher ([`felinepaw_tool.py`](felinepaw_tool.py), CLI + tkinter GUI)
 | Python | **3.9 or newer** (3.9 / 3.10 / 3.11 / 3.12 all tested). Version management: [Miniconda](https://docs.conda.io/en/latest/miniconda.html) / [pyenv](https://github.com/pyenv/pyenv) recommended; the official installer works too |
 | 3rd-party | `requests` (`pip install requests`); **`lxml`** is also required for e-hentai / FA / WildDream; **`DrissionPage`** is **optional** — only needed for the yiff-auto browser variant and the FA-cookies helper |
 | OS | **Windows 10 / 11** (the `.bat` launcher is Windows-only); other OSes should work in theory (no Windows-only code) but are untested |
-| Network | A working local proxy (Clash / mihomo on `http://127.0.0.1:7897` by default) — most of these sites are not directly reachable from mainland China |
+| Network | **Depends on where you are.** Outside mainland China these sites are directly reachable; from mainland China a proxy is required. **Any HTTP proxy works** — see the Proxy section below |
 
 > **Quickest start / 最省事的起步**:
 >
@@ -42,35 +42,51 @@ A unified launcher ([`felinepaw_tool.py`](felinepaw_tool.py), CLI + tkinter GUI)
 
 ---
 
-## 🌐 Proxy port / 代理端口
+## 🌐 Proxy / 代理
 
-> 90% of users can skip this section. This is for those whose local proxy is not on the default `127.0.0.1:7897`.
+**First question — do you need one at all?** / **先问一句：你到底需不需要代理？**
 
-The tool defaults to `http://127.0.0.1:7897` (Clash / Clash Verge / mihomo mixed port).
-If you changed the port (or use SS / V2RayN / NekoBox / another local proxy), change it via:
+| Network / 网络 | Proxy / 代理 |
+|---|---|
+| Outside mainland China / 境外 | Not needed — these sites are directly reachable. Leave `--proxy` empty, or pass `--proxy off` |
+| Mainland China / 中国大陆 | Required. **Any HTTP proxy works** — Clash / mihomo / v2rayN / NekoBox / Surge / Proxifier / a corporate gateway |
 
-**Option 1: environment variables (recommended, persistent)**
+**An empty `--proxy` follows your system proxy — it is not a hardcoded port.** It reads
+`HTTP_PROXY` / `HTTPS_PROXY`, then the Windows system proxy, and falls back to a **direct**
+connection if neither is set. One exception: the `ehentai` site script probes the usual
+`7897` / `7890` / `7891` first, because a direct connection there always fails from
+mainland China.
+
+> **`--proxy` 留空 = 跟随系统代理，不是写死的端口。** 先读 `HTTP_PROXY` / `HTTPS_PROXY`，
+> 再读 Windows 系统代理设置，两处都没有就**直连**。
+> 一个例外：`ehentai` 站点脚本会先试 `7897` / `7890` / `7891` —— 那个站境内直连必然失败。
+
+**Using a client that isn't Clash?** Anything that exposes an **HTTP** port works. Find the
+port in that client and pass it:
+
+> **用的不是 Clash 也完全可以。** 只要它提供一个 **HTTP 端口**就行 —— 到那个软件里找到端口填进来：
 
 ```bat
-:: Windows cmd — permanent, takes effect after reopening cmd
+:: Option 1: persistent / 方法 1：环境变量（永久，重开 cmd 生效）
 setx HTTP_PROXY "http://127.0.0.1:YOUR_PORT"
 setx HTTPS_PROXY "http://127.0.0.1:YOUR_PORT"
 ```
 
-**Option 2: command-line flag (one-off)**
-
 ```bash
+# Option 2: one-off flag / 方法 2：命令行参数（单次生效）
 python felinepaw_tool.py tag feline --proxy http://127.0.0.1:YOUR_PORT
-```
 
-**Option 3: skip the proxy (if direct connection works)**
-
-```bash
+# Option 3: no proxy at all / 方法 3：不用代理（境外网络）
 python felinepaw_tool.py tag feline --proxy off
 ```
 
-> 90% 的用户可以跳过这一节——除非你改了 Clash 的默认端口（或用 SS / V2RayN / NekoBox / 其他本地代理）。
-> 默认走 `http://127.0.0.1:7897`（Clash / Clash Verge / mihomo 混合端口），改法同上。
+> ⚠️ **SOCKS is not supported by default.** `socks5://` fails with
+> `Missing dependencies for SOCKS support` — `requests` needs an extra package for it.
+> Either use the client's **HTTP / mixed port** (recommended), or install
+> `pip install "requests[socks]"` and the same address will work.
+>
+> ⚠️ **默认不支持 SOCKS**：`socks5://` 会报 `Missing dependencies for SOCKS support`。
+> 用客户端的「HTTP / 混合端口」（推荐），或 `pip install "requests[socks]"` 后原地址即可生效。
 
 ## 🆘 Something broke? / 出问题了？
 
@@ -123,11 +139,11 @@ Python install required**:
 
 ```bat
 python felinepaw_tool.py bbooru --tags landscape --limit 200 -o ./out
-python felinepaw_tool.py bbooru --pool 33976 --limit inf -o ./out
+python felinepaw_tool.py bbooru --pool 123456 --limit inf -o ./out
 python felinepaw_tool.py bbooru --tags <artist_tag> --mode artist -o ./out
 python felinepaw_tool.py hypnohub --tags spiral --limit 50 -o ./out
 python felinepaw_tool.py rule34us --tags landscape --limit 50 -o ./out
-python felinepaw_tool.py wilddream "https://www.wilddream.net/art/userpage/gallery?userpagename=xxx&folderid=485" --limit inf -o ./out
+python felinepaw_tool.py wilddream "https://www.wilddream.net/art/userpage/gallery?userpagename=xxx&folderid=123" --limit inf -o ./out
 ```
 
 Or launch the GUI: `python felinepaw_gui.py`
@@ -179,11 +195,11 @@ Every field on the form, what it sets, and the one trap worth knowing:
 |---|---|---|
 | **站点** | `site` | 选下载站：`e621`、`e926`、`yiff`、`ehentai`、`fa`、`bbooru`、`wilddream`、`hypnohub`、`rule34us`。选 `e926` 时「开始」会被禁用（被 Cloudflare 拦，纯 requests 进不去） |
 | **模式** | `--mode` | **只对 `e621` 和 `bbooru` 生效**，其它站点这格是空的。e621 可选 `tags` / `page` / `artist` / `pool` / `pool-rev`；bbooru 可选 `auto` / `api` / `html` / `artist` |
-| **目标/标签** | 位置参数 | **含义随站点变**，见下面那张表 |
-| **标签(--tags)** | `--tags` | 标签搜索，多个标签用空格隔开，如 `cute fox` |
+| **目标网址** | 位置参数 | 只放**网址或编号**（作品 / 画廊 / 池子 URL，或纯数字 id）。用不上的站整格变灰 |
+| **标签** | `--tags` | 只放**标签**，多个用空格隔开，如 `cute fox`。用不上的站整格变灰 |
 | **输出目录** | `-o` | 图片存到哪。留空 = 当前目录 |
 | **数量限制** | `--limit` | 下多少张。填 `inf` = 全部；**留空 = 脚本默认 120 张，不是全部** |
-| **代理** | `--proxy` | 留空 = 自动探测；`off` = 直连；也可填 `http://127.0.0.1:7897` |
+| **代理** | `--proxy` | 留空 = 跟随系统代理；`off` = 直连；也可填 `http://127.0.0.1:端口` |
 | **页码(--page)** | `--page` | 只下某一页。对 e621 的 `page` 模式、bbooru、hypnohub、rule34us 有效。**留空 = 翻全部页** |
 | **artist 跳过非池帖** | `--skip-others` | **e621 / bbooru** 的 artist 模式：不属于任何池子的帖子不下载 |
 | **全量查池** | `--force-pool-check` | 仅 bbooru 的 artist 模式：默认只探测前 10 个帖子，勾上则全部查一遍 |
@@ -197,31 +213,34 @@ Every field on the form, what it sets, and the one trap worth knowing:
 >
 > - **站点**：选站。`e926` 会被禁用（Cloudflare 拦截），想下安全版请用 `e621` 或浏览器。
 > - **模式**：只有 e621 / bbooru 有；e621 = 标签/分页/艺术家/池/池反转，bbooru = 自动/API/HTML/艺术家。
-> - **目标/标签** 与 **标签(--tags)**：两格的分工随站点变，见下一张表 —— **这是最常填错的地方**。
+> - **目标网址** 与 **标签**：网址/编号进「目标网址」，标签进「标签」；用不上的格子会变灰，见下一张表。
 > - **输出目录**：留空就下到当前目录，建议每次都点「浏览...」指定一个。
 > - **数量限制**：`inf` = 全部；**留空不是"不限"，是脚本默认的 120 张**。
-> - **代理**：留空让它自动探测；本机 Clash 在跑、又提示连不上时，可以显式填 `http://127.0.0.1:7897`。
+> - **代理**：留空就跟随系统代理；提示连不上时，显式填你代理软件的 HTTP 端口（`http://127.0.0.1:端口`）。
 > - **页码**：留空 = 翻全部页；填了才只下那一页。
 > - **artist 跳过非池帖**：`e621` 和 `bbooru` 的 artist 模式都能用 —— 不下不属于任何池子的帖子。
 > - **全量查池 / pool 反转编号**：这两格只有 bbooru 用；e621 侧对应的是「模式」下拉里的 `pool-rev`。
 > - **重新下载 / 挑序号 / 每画廊限张 / 只列名单**：按括号里写的站点生效，用不到就留空、不勾。
 
-**「目标/标签」这一格到底填什么，取决于站点：**
+**「目标网址」和「标签」怎么分工 —— 一条规矩：网址进网址格，标签进标签格。用不上的格子会变灰。**
+**Target URL vs tags — one rule: URLs/ids go in Target URL, tags go in the tags box. Unused boxes are greyed out.**
 
-| Site | What goes in 目标/标签 |
-|---|---|
-| `e621` / `e926` | 模式选 `pool` / `pool-rev` 时填池子 URL（如 `https://e621.net/pools/123`）；其它模式不用填，改用**标签**格 |
-| `yiff` | 标签 |
-| `ehentai` | 画廊 URL；**标签搜索**请用**标签**格 |
-| `fa` | 作品 URL |
-| `bbooru` | 池子 URL 或纯数字 id（如 `33976`）。填了这里就**不要**再填**标签**格 |
-| `wilddream` | 画廊 URL |
-| `hypnohub` / `rule34us` | 不用填，标签一律写在**标签**格 |
+| Site | 目标网址 / Target URL | 标签 / Tags |
+|---|---|---|
+| `e621` / `e926` | 仅 `pool` / `pool-rev` 模式：池子 URL 或 id（如 `12345`） | `tags` / `page` / `artist` 模式：标签 |
+| `yiff` | 灰掉 | **标签填这里** —— yiff 的入口就是标签，如 `feline` |
+| `ehentai` | 画廊 URL | 标签搜索（两个只填一个） |
+| `fa` | 作者名（如 `someartist`，下整个画廊）、画廊 URL、作品 URL 或纯编号（如 `12345678`） | 灰掉 |
+| `bbooru` | 池子 URL 或 id（如 `123456`） | 标签搜索（两个只填一个） |
+| `wilddream` | 画廊 URL | 灰掉 |
+| `hypnohub` / `rule34us` | 灰掉 | 标签 |
 
-> 一句话记法：**能"按标签找"的站（hypnohub / rule34us / bbooru 标签模式）用「标签」格；
-> 需要"直接指一个具体东西"的（画廊 URL、作品 URL、池子）用「目标/标签」格。**
-> bbooru 是个例外 —— 它两种都能做，靠"哪个格子有内容"来区分：标签格有内容 = 按标签下；
-> 标签格空着、目标格有内容 = 当池子下。
+> 灰的不只是这两个格子：「页码」「挑序号」「每画廊限张」「数量限制」「代理」和那几个勾选框，
+> 只要当前站点用不上都会变灰。**灰掉 = 这个站不用它，填了也不生效**（不是装饰，命令里确实会剔掉）。
+> 切到某个站时，参数区下面和日志框里都会给一句该站的填写示例。
+>
+> Greyed out means "this site doesn't use it", and the value really is dropped from the command.
+> Switching sites prints a fill-in example both under the parameter area and into the log.
 
 ### FA credentials / FA 站凭据（选 `fa` 时才出现）
 
@@ -259,6 +278,45 @@ parameter area; switching to any other site hides it again.
 > `Enable JavaScript and cookies to continue`），脚本会直接说明 —— **这不是密码问题**，
 > 换 cookie、换 UA 都没用。用真浏览器跑一次 `FA_get_cookies.py`，导出的 cookie 才是后面
 > requests 抓取能跑通的关键。
+
+### FA: whole gallery, grouped by title / FA 站：整个画廊 + 按作品名分组
+
+Give it an **artist name** and FA downloads that artist's whole gallery, putting each
+multi-part work into its own folder. Same-name works are matched after dropping the part
+number (`Sample Series 1` / `Sample Series 2` / `Chapter VII of …` all land together).
+
+给 FA 一个**作者名**，它会把这个人的画廊整个下下来，并且把**同一部作品的分集放进同一个文件夹**
+（`Sample Series 1` / `Sample Series 2` / `Chapter VII of …` 会被认成同一部）。
+
+```
+out/
+  someartist/
+    01 sample series/001 Sample Series - Part 1 [POLL].jpg
+    02 another series/001 Another Series 2.jpg
+    _singles/Standalone Piece [12345678].jpg
+```
+
+| Rule / 规则 | 说明 |
+|---|---|
+| 多张的系列 | 一个文件夹，组内按 `part` 序号排，文件名 `001 原标题` |
+| 只有一张的散图 | 统一进 `_singles/`，文件名带作品号防重名 |
+| 文件夹前缀 | 两位数序号，按"张数从多到少"排，顺序稳定 |
+| 默认数量 | **作者模式全下**（不套 120 张上限）；要限量就在「数量限制」填数字 |
+
+```markdown
+| Rule / 规则 | 说明 |
+|---|---|
+| 多张的系列 | 一个文件夹，组内按 `part` 序号排，文件名 `001 原标题` |
+| 只有一张的散图 | 统一进 `_singles/`，文件名带作品号防重名 |
+| 文件夹前缀 | 两位数序号，按"张数从多到少"排，顺序稳定 |
+| 默认数量 | **作者模式全下**（不套 120 张上限）；要限量就在「数量限制」填数字 |
+```
+
+> 作者名和作品编号的区别：作品编号只下一个系列（靠标题扩展），作者名下整个画廊。
+> 拿作品编号当入口、又想下整个画廊，命令行加 `--all`。
+>
+> An artist name downloads everything; a submission ID downloads just that series.
+> Use `--all` on the command line to expand a submission ID into the whole gallery.
 
 ### Scenario 1 — 按标签批量下载（以 rule34.us 为代表）
 
@@ -306,7 +364,7 @@ no pool go to `others/`.
 >
 > 1. **站点** 选 `bbooru`
 > 2. **模式** 选 `artist`
-> 3. **标签(--tags)** 填艺术家标签 —— 注意艺术家名填在**标签格**，不是「目标/标签」格
+> 3. **标签** 填艺术家标签 —— 艺术家名填在**标签格**，不是「目标网址」格
 > 4. 可选：勾 **artist 跳过非池帖**，就不要 `others/` 那个文件夹了
 > 5. 可选：勾 **全量查池**。默认只探测前 10 个帖子，一旦没发现池子就提前收工；
 >    你要是知道池子出现在列表靠后的位置，就勾上让它全查一遍
@@ -333,18 +391,18 @@ entries you want — one entry is one pool (or `others/`), numbered exactly as `
 Download one specific collection, in order.
 
 1. **站点** → `bbooru`
-2. **目标/标签** → the pool's **show-page URL**, or just its numeric id
-   (either `https://bbooru.com/index.php?page=pool&s=show&id=33976` or `33976`)
-3. **标签(--tags)** → **leave empty** (this is what tells the GUI you mean a pool)
+2. **目标网址** → the pool's **show-page URL**, or just its numeric id
+   (either `https://bbooru.com/index.php?page=pool&s=show&id=123456` or `123456`)
+3. **标签** → **leave empty** (a pool URL and tags are mutually exclusive)
 4. Optional: tick **pool 反转编号** to number the files in reverse order
 5. **输出目录** → pick a folder, then **▶ 开始**
 
 > 下载某个指定合集，按顺序编好号。
 >
 > 1. **站点** 选 `bbooru`
-> 2. **目标/标签** 填池子的 **show 页 URL**，或者只填那串数字 id
->    （`https://bbooru.com/index.php?page=pool&s=show&id=33976` 和 `33976` 都行）
-> 3. **标签(--tags)** **留空** —— 正是"标签格空着、目标格有内容"这一点，让 GUI 知道你要下的是池子
+> 2. **目标网址** 填池子的 **show 页 URL**，或者只填那串数字 id
+>    （`https://bbooru.com/index.php?page=pool&s=show&id=123456` 和 `123456` 都行）
+> 3. **标签** **留空** —— 池子地址和标签只能填一个，两个都填会被拦下来
 > 4. 可选：勾 **pool 反转编号**，文件编号就倒过来
 > 5. **输出目录** 选个文件夹，点 **▶ 开始**
 >
@@ -442,11 +500,22 @@ python sites/e-hentai/EH_scraper_v2.py --tags "language:chinese$" --limit 30 --p
 
 :: FurAffinity（需登录；先导出 cookies）
 python sites/furaffinity/FA_get_cookies.py
+
+:: 一张作品 -> 抓同系列（脚本从标题识别系列名，再翻画廊找同名的）
 python sites/furaffinity/FA_scraper.py "https://www.furaffinity.net/view/xxx/" --cookies fa_cookies.json
+
+:: 只下这一张，不找系列
+python sites/furaffinity/FA_scraper.py 12345678 --just-this
+
+:: 整个作者画廊 -> 自动按作品名分组，一部作品一个文件夹
+python sites/furaffinity/FA_scraper.py someartist -o ./out
+python sites/furaffinity/FA_scraper.py "https://www.furaffinity.net/gallery/someartist/" -o ./out
+:: 也可以拿一张作品当入口，用 --all 扩到整个作者
+python sites/furaffinity/FA_scraper.py 12345678 --all -o ./out
 
 :: BBooru（JSON API；池子两种输入方式均可；--adult n 只看 general/safe，对应站内 set=general）
 python sites/BBooru/B_scraper.py --tags "cute fox" --limit 100 --threads 12 -o ./out
-python sites/BBooru/B_scraper.py --pool https://bbooru.com/index.php?page=pool&s=show&id=33976 -o ./out
+python sites/BBooru/B_scraper.py --pool https://bbooru.com/index.php?page=pool&s=show&id=123456 -o ./out
 
 :: BBooru artist 模式（按 pool 分组；不属于任何 pool 的进 others/）
 python sites/BBooru/B_scraper.py --tags <artist_tag> --mode artist -o ./out
@@ -455,7 +524,7 @@ python sites/BBooru/B_scraper.py --tags <artist_tag> --mode artist --force-pool-
 
 :: BBooru 单页 / 反转编号
 python sites/BBooru/B_scraper.py --tags fox --page 2 -o ./out
-python sites/BBooru/B_scraper.py --pool 33976 --pool-rev -o ./out
+python sites/BBooru/B_scraper.py --pool 123456 --pool-rev -o ./out
 
 :: HypnoHub（纯 HTML，需代理；--adult n 时不显示成人原图）
 python sites/hypnohub/H_scraper.py --tags spiral --limit 50 --threads 8 -o ./out
@@ -464,7 +533,7 @@ python sites/hypnohub/H_scraper.py --tags spiral --limit 50 --threads 8 -o ./out
 python sites/rule34us/R_scraper.py --tags landscape --limit 50 --threads 8 -o ./out
 
 :: WildDream（整本漫画；URL 两种形态自动兼容；--threads 并发下载）
-python sites/wilddream/W_scraper.py "https://www.wilddream.net/art/userpage/gallery?userpagename=xxx&folderid=485" --limit inf --threads 12 -o ./out
+python sites/wilddream/W_scraper.py "https://www.wilddream.net/art/userpage/gallery?userpagename=xxx&folderid=123" --limit inf --threads 12 -o ./out
 
 :: 被站点限速时：放慢节奏 + 撞到 429 时全体刹车（bbooru / hypnohub / rule34us）
 python sites/BBooru/B_scraper.py --tags fox --delay 1 --jitter 1.5 --cooldown 30 --threads 4 -o ./out

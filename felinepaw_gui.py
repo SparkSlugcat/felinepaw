@@ -28,12 +28,68 @@ import felinepaw_tool as tool
 SITES = ["e621", "e926", "yiff", "ehentai", "fa", "bbooru", "wilddream", "hypnohub", "rule34us"]
 E621_MODES = ["tags", "page", "artist", "pool", "pool-rev"]
 BBOORU_MODES = ["auto", "api", "html", "artist"]
+#: FA_get_cookies.py 的默认产物 —— FA_scraper.py 没收到 --cookies 时也会自动用它
+FA_COOKIE = HERE / "sites" / "furaffinity" / "fa_cookies.json"
+
+#: 界面上可被「用不上就灰掉」的输入口。键名对应 input_spec() 返回的字典。
+_INPUT_KEYS = ("target", "tags", "page", "pick", "pages", "limit", "proxy",
+               "skip_others", "force_pool", "pool_rev", "force", "dry_run")
+
+
+def input_spec(site: str, mode: str = "") -> dict:
+    """这个站（这个模式）下，哪些输入口真的会被用到。
+
+    分工只有一条 —— **目标网址 = 网址或编号，标签 = 标签**。
+    e621 的 tags/page/artist 只吃标签，pool/pool-rev 只吃网址；
+    yiff 是例外：它的位置参数就是标签（`yiff_scraper.py feline`），所以归标签框。
+    """
+    def spec(**on):
+        base = dict.fromkeys(_INPUT_KEYS, False)
+        base.update(limit=True, proxy=True)   # 大多数站都吃这两个
+        base.update(on)
+        return base
+
+    if site in ("e621", "e926"):
+        # e621 那批旧脚本没有 --proxy，proxy 一律不给
+        if mode == "tags":
+            return spec(tags=True, proxy=False)
+        if mode == "page":
+            return spec(tags=True, page=True, limit=False, proxy=False)
+        if mode == "artist":
+            return spec(tags=True, pick=True, dry_run=True, limit=False, proxy=False)
+        return spec(target=True, limit=False, proxy=False)      # pool / pool-rev
+
+    if site == "yiff":
+        return spec(tags=True)                                  # 入口是标签，不是网址
+    if site == "ehentai":
+        return spec(target=True, tags=True, pick=True, pages=True, force=True, dry_run=True)
+    if site == "fa":
+        return spec(target=True, dry_run=True)
+    if site == "bbooru":
+        return spec(target=True, tags=True, skip_others=True, force_pool=True,
+                    pool_rev=True, force=True, dry_run=True)
+    if site == "wilddream":
+        return spec(target=True, proxy=False)
+    if site in ("hypnohub", "rule34us"):
+        return spec(tags=True, page=True, force=True, dry_run=True)
+    return spec()
+
+
+def example_key(site: str, mode: str = "") -> str:
+    """切到这个站时该显示哪句示例（词条 key，切语言能一起重译）。"""
+    if site in ("e621", "e926"):
+        return {"tags": "gui_ex_e621_tags", "page": "gui_ex_e621_page",
+                "artist": "gui_ex_e621_artist", "pool": "gui_ex_e621_pool",
+                "pool-rev": "gui_ex_e621_poolrev"}.get(mode, "gui_ex_e621_tags")
+    return {"yiff": "gui_ex_yiff", "ehentai": "gui_ex_ehentai", "fa": "gui_ex_fa",
+            "bbooru": "gui_ex_bbooru", "wilddream": "gui_ex_wilddream",
+            "hypnohub": "gui_ex_tags_only", "rule34us": "gui_ex_tags_only"}.get(site, "")
 
 
 class FelinepawGUI:
     def __init__(self, root: tk.Tk):
         self.root = root
-        root.geometry("780x700")
+        root.geometry("780x740")   # 参数区多了一行示例，日志区留住原来的高度
         self.queue = queue.Queue()
         self.proc = None
         self._status_key = "gui_idle"
@@ -75,14 +131,19 @@ class FelinepawGUI:
         self._fa_visible = False          # 面板当前是否已 pack（切站/切语言都要靠它判断）
 
     def _build_lang_bar(self):
-        """顶部语言小横条（靠右）：只建一次，重建参数区时不受 pack 顺序影响。"""
+        """顶部语言小横条（靠右）：只建一次，重建参数区时不受 pack 顺序影响。
+
+        pack(side="right") 是从右往左排的：先 pack 的占最右侧。
+        所以先放下拉框、后放标签，屏幕上才是「标签 下拉框」的读法；
+        `padx=(0, 14)` 是给窗口右边缘留的呼吸空间（原先标签直接贴边，太挤）。
+        """
         self._lang_bar = ttk.Frame(self.root)
         self._lang_bar.pack(fill="x", padx=10, pady=(8, 0))
-        self.lang_label = ttk.Label(self._lang_bar, text=i18n.t("gui_lang_label"))
-        self.lang_label.pack(side="right", padx=(0, 6))
         self.lang_cb = ttk.Combobox(self._lang_bar, textvariable=self.lang_var, width=9,
                                     state="readonly", values=list(i18n.LANG_NAMES))
-        self.lang_cb.pack(side="right")
+        self.lang_cb.pack(side="right", padx=(0, 14))
+        self.lang_label = ttk.Label(self._lang_bar, text=i18n.t("gui_lang_label"))
+        self.lang_label.pack(side="right", padx=(0, 6))
         self.lang_cb.bind("<<ComboboxSelected>>", self._on_lang_change)
 
     def _on_lang_change(self, event=None):
@@ -126,53 +187,81 @@ class FelinepawGUI:
         self.mode_cb = ttk.Combobox(bar, textvariable=self.mode_var, values=E621_MODES,
                                      state="readonly", width=9)
         self.mode_cb.grid(row=0, column=3, padx=2, pady=6, sticky="w")
+        # e621 换模式会换输入口（tags 吃标签、pool 吃网址），所以模式一变就重算
+        self.mode_cb.bind("<<ComboboxSelected>>", lambda e: self._apply_inputs())
 
-        ttk.Label(bar, text=i18n.t("gui_target_tags")).grid(row=1, column=0, padx=(8, 2), pady=6, sticky="e")
-        ttk.Entry(bar, textvariable=self.target_var, width=40).grid(row=1, column=1, columnspan=3,
-                                                                    sticky="we", pady=6)
+        # 第 1 行只放网址/编号，第 2 行只放标签 —— 别让人在两个框之间猜
+        ttk.Label(bar, text=i18n.t("gui_target_url")).grid(row=1, column=0, padx=(8, 2), pady=6,
+                                                           sticky="e")
+        self.target_entry = ttk.Entry(bar, textvariable=self.target_var, width=40)
+        self.target_entry.grid(row=1, column=1, columnspan=3, sticky="we", pady=6)
 
         ttk.Label(bar, text=i18n.t("gui_tags")).grid(row=2, column=0, padx=(8, 2), pady=6, sticky="e")
-        ttk.Entry(bar, textvariable=self.tags_var, width=40).grid(row=2, column=1, columnspan=3,
-                                                                  sticky="we", pady=6)
+        self.tags_entry = ttk.Entry(bar, textvariable=self.tags_var, width=40)
+        self.tags_entry.grid(row=2, column=1, columnspan=3, sticky="we", pady=6)
 
         ttk.Label(bar, text=i18n.t("gui_output")).grid(row=3, column=0, padx=(8, 2), pady=6, sticky="e")
-        ttk.Entry(bar, textvariable=self.out_var, width=32).grid(row=3, column=1, columnspan=2,
-                                                                 sticky="we", pady=6)
-        ttk.Button(bar, text=i18n.t("gui_browse"), command=self._pick_dir).grid(row=3, column=3, padx=4)
+        # 输入框和「浏览」放进同一个 Frame：按钮才会紧跟输入框右边。
+        # 直接摆成两列的话，最右列带 weight 变宽后按钮会甩到中间去留一片空白。
+        out_row = ttk.Frame(bar)
+        out_row.grid(row=3, column=1, columnspan=3, sticky="we", pady=6)
+        out_row.columnconfigure(0, weight=1)
+        ttk.Entry(out_row, textvariable=self.out_var).grid(row=0, column=0, sticky="we")
+        ttk.Button(out_row, text=i18n.t("gui_browse"), command=self._pick_dir).grid(
+            row=0, column=1, padx=(6, 0))
 
         ttk.Label(bar, text=i18n.t("gui_limit")).grid(row=4, column=0, padx=(8, 2), pady=6, sticky="e")
-        ttk.Entry(bar, textvariable=self.limit_var, width=10).grid(row=4, column=1, sticky="w", pady=6)
+        self.limit_entry = ttk.Entry(bar, textvariable=self.limit_var, width=10)
+        self.limit_entry.grid(row=4, column=1, sticky="w", pady=6)
         ttk.Label(bar, text=i18n.t("gui_proxy")).grid(row=4, column=2, padx=(12, 2), pady=6, sticky="e")
-        ttk.Entry(bar, textvariable=self.proxy_var, width=24).grid(row=4, column=3, sticky="w", pady=6)
+        self.proxy_entry = ttk.Entry(bar, textvariable=self.proxy_var, width=24)
+        self.proxy_entry.grid(row=4, column=3, sticky="w", pady=6)
 
         # 第 5 行：页码 + 高级选项（e621 page 模式 / bbooru --page / hypnohub --page）
         ttk.Label(bar, text=i18n.t("gui_page")).grid(row=5, column=0, padx=(8, 2), pady=6, sticky="e")
-        ttk.Entry(bar, textvariable=self.page_var, width=10).grid(row=5, column=1, sticky="w", pady=6)
+        self.page_entry = ttk.Entry(bar, textvariable=self.page_var, width=10)
+        self.page_entry.grid(row=5, column=1, sticky="w", pady=6)
         opts = ttk.Frame(bar)
         opts.grid(row=5, column=2, columnspan=2, sticky="w", padx=(12, 2))
-        ttk.Checkbutton(opts, text=i18n.t("gui_skip_others"),
-                        variable=self.skip_others_var).pack(side="left")
-        ttk.Checkbutton(opts, text=i18n.t("gui_force_pool"),
-                        variable=self.force_pool_var).pack(side="left", padx=(8, 0))
-        ttk.Checkbutton(opts, text=i18n.t("gui_pool_rev"),
-                        variable=self.pool_rev_var).pack(side="left", padx=(8, 0))
-        ttk.Checkbutton(opts, text=i18n.t("gui_force"),
-                        variable=self.force_var).pack(side="left", padx=(8, 0))
+        # 勾选框也归类到输入口：用不上的站一并灰掉，不然勾了也白勾
+        self._checks = {}
+        for name, var, key in (
+                ("skip_others", self.skip_others_var, "gui_skip_others"),
+                ("force_pool", self.force_pool_var, "gui_force_pool"),
+                ("pool_rev", self.pool_rev_var, "gui_pool_rev"),
+                ("force", self.force_var, "gui_force")):
+            chk = ttk.Checkbutton(opts, text=i18n.t(key), variable=var)
+            chk.pack(side="left", padx=(0, 8))
+            self._checks[name] = chk
 
-        # 第 6 行：e-hentai 专用（挑序号 / 每画廊限张 / 只列名单）
+        # 第 6 行：挑序号 / 每画廊限张 / 只列名单（e-hentai、e621 artist 用得上）
         ttk.Label(bar, text=i18n.t("gui_pick")).grid(row=6, column=0, padx=(8, 2), pady=6, sticky="e")
-        ttk.Entry(bar, textvariable=self.pick_var, width=14).grid(row=6, column=1, sticky="w", pady=6)
+        self.pick_entry = ttk.Entry(bar, textvariable=self.pick_var, width=14)
+        self.pick_entry.grid(row=6, column=1, sticky="w", pady=6)
         opts2 = ttk.Frame(bar)
         opts2.grid(row=6, column=2, columnspan=2, sticky="w", padx=(12, 2))
         ttk.Label(opts2, text=i18n.t("gui_pages")).pack(side="left")
-        ttk.Entry(opts2, textvariable=self.pages_var, width=6).pack(side="left", padx=(2, 10))
-        ttk.Checkbutton(opts2, text=i18n.t("gui_dry_run"),
-                        variable=self.dry_var).pack(side="left")
+        self.pages_entry = ttk.Entry(opts2, textvariable=self.pages_var, width=6)
+        self.pages_entry.pack(side="left", padx=(2, 10))
+        dry = ttk.Checkbutton(opts2, text=i18n.t("gui_dry_run"), variable=self.dry_var)
+        dry.pack(side="left")
+        self._checks["dry_run"] = dry
 
+        # 第 7 行：这个站的示例（随站点/模式变，切语言一起重译）
+        self.hint_label = ttk.Label(bar, text="", foreground="#0a58ca",
+                                    wraplength=740, justify="left")
+        self.hint_label.grid(row=7, column=0, columnspan=4, padx=8, pady=(0, 2), sticky="w")
+
+        # 第 8 行：通用提示（跟站点无关的那些约定）
         ttk.Label(bar, text=i18n.t("gui_hint"),
                   foreground="gray", wraplength=740, justify="left"
-                  ).grid(row=7, column=0, columnspan=4, padx=8, pady=(0, 4), sticky="w")
-        bar.columnconfigure(1, weight=1)
+                  ).grid(row=8, column=0, columnspan=4, padx=8, pady=(0, 4), sticky="w")
+        # 多出来的宽度给最右一列，别给第 1 列。
+        # 第 1 列装的是站点下拉框、数量限制、页码、挑序号 —— 让它当唯一带 weight 的列时，
+        # 窗口只要比内容窄一点点，全部压缩都落在这一列上，这四个控件会被压成 1px 宽。
+        # 英文文案比中文长（需求宽度差 100 多像素），所以英文界面必现。
+        bar.columnconfigure(1, weight=0, minsize=110)
+        bar.columnconfigure(3, weight=1)
 
         # ===== FA 凭据面板 =====
         # 单独一个 LabelFrame，而不是往 bar 里加行：只有 site == fa 时才 pack 出来，
@@ -218,7 +307,10 @@ class FelinepawGUI:
         logf = ttk.LabelFrame(self.root, text=i18n.t("gui_log_frame"))
         self._log_frame = logf
         logf.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-        self.log_text = tk.Text(logf, wrap="word", state="disabled", font=("Microsoft YaHei UI", 9))
+        # height=8 是"最低要这么多行"，不是实际高度：日志区 expand=True 会吃掉剩余空间。
+        # 默认的 24 行会让窗口的最小需求虚高 250px，窗口尺寸一自适应就顶到屏幕上沿。
+        self.log_text = tk.Text(logf, wrap="word", state="disabled", height=8,
+                                font=("Microsoft YaHei UI", 9))
         sb = ttk.Scrollbar(logf, command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=sb.set)
         sb.pack(side="right", fill="y")
@@ -235,6 +327,29 @@ class FelinepawGUI:
         self.status_var.set(i18n.t(self._status_key, **self._status_kw))
         self._refresh_mode_options()
         self._sync_fa_panel()      # 切语言重建后，按当前站点决定 FA 面板要不要露出来
+        self._apply_inputs()       # 灰掉这个站用不上的输入口 + 填上示例
+        self._fit_window()         # 英文文案更长：装不下就把窗口撑大，别让控件被压扁
+
+    def _fit_window(self):
+        """内容比窗口大时把窗口撑大（只增不减，且不超出屏幕）。
+
+        切换语言会整体重建控件，文案长度变了需要的尺寸也跟着变 ——
+        Tk 遇到装不下不会提示：宽度上会把列压扁（输入框变成一条竖线），
+        高度上会把日志区压到只剩几行。这里量一次真实需求，不够就补。
+        """
+        self.root.update_idletasks()
+        need_w = self.root.winfo_reqwidth() + 8
+        need_h = self.root.winfo_reqheight() + 8
+        cur_w, cur_h = self.root.winfo_width(), self.root.winfo_height()
+        if cur_w <= 1:                     # 还没映射到屏幕，用初始几何值
+            cur_w, cur_h = 780, 740
+        room_w = self.root.winfo_screenwidth() - 80
+        room_h = self.root.winfo_screenheight() - 120
+        new_w = min(max(cur_w, need_w), room_w)
+        new_h = min(max(cur_h, need_h), room_h)
+        if (new_w, new_h) != (cur_w, cur_h):
+            self.root.geometry("%dx%d" % (new_w, new_h))
+        self.root.minsize(min(need_w, room_w), 540)
 
     def _set_status(self, key, **kw):
         """状态栏文案记成 (key, 参数)，切语言重建时能原样重译。"""
@@ -246,13 +361,51 @@ class FelinepawGUI:
         site = self.site_var.get()
         if site in ("e621", "e926"):
             self.mode_label.config(text=i18n.t("gui_mode_e621"))
-            self.mode_cb.config(values=E621_MODES)
+            values = E621_MODES
         elif site == "bbooru":
             self.mode_label.config(text=i18n.t("gui_mode_bbooru"))
-            self.mode_cb.config(values=BBOORU_MODES)
+            values = BBOORU_MODES
         else:
             self.mode_label.config(text=i18n.t("gui_mode"))
-            self.mode_cb.config(values=[])
+            values = []
+        # 不按模式走的站（e-hentai / fa / yiff / 那几个 booru）根本没有模式可选，
+        # 与其留一个空下拉框让人点，不如一起灰掉 —— 和别的输入口一个规矩。
+        self.mode_cb.config(values=values, state="readonly" if values else "disabled")
+        # 换了站点，原来的模式值可能不在新候选里（tags 之于 bbooru）——
+        # 留着会让 input_spec() 走错分支，所以归位到第一个候选
+        if values and self.mode_var.get() not in values:
+            self.mode_var.set(values[0])
+
+    def _apply_inputs(self):
+        """按站点（和 e621/bbooru 的模式）把用不上的输入口灰掉，并显示该站示例。
+
+        ⚠️ 灰掉只是提示，拦不住人 —— `StringVar.get()` 照样能读出旧文本。
+        真正的把关在 `argparse_fix()`：那里会按同样的 input_spec() 把无效项置空。
+        """
+        site, mode = self.site_var.get(), self.mode_var.get()
+        spec = input_spec(site, mode)
+        entries = {
+            "target": getattr(self, "target_entry", None),
+            "tags": getattr(self, "tags_entry", None),
+            "page": getattr(self, "page_entry", None),
+            "pick": getattr(self, "pick_entry", None),
+            "pages": getattr(self, "pages_entry", None),
+            "limit": getattr(self, "limit_entry", None),
+            "proxy": getattr(self, "proxy_entry", None),
+        }
+        for name, w in entries.items():
+            if w is not None and w.winfo_exists():
+                w.config(state="normal" if spec.get(name) else "disabled")
+        for name, w in getattr(self, "_checks", {}).items():
+            if w.winfo_exists():
+                w.config(state="normal" if spec.get(name) else "disabled")
+
+        key = example_key(site, mode)
+        text = i18n.t(key) if key else ""
+        if text and not all(spec.values()):
+            text = text + "  " + i18n.t("gui_ex_disabled")
+        if getattr(self, "hint_label", None) is not None and self.hint_label.winfo_exists():
+            self.hint_label.config(text=text)
 
     def _on_site(self):
         site = self.site_var.get()
@@ -264,14 +417,26 @@ class FelinepawGUI:
         else:
             self.start_btn.config(state="normal")
             self._set_status("gui_idle")
-        # FA 需要登录态：把凭据面板露出来，并在日志里说清"要填什么、不填会怎样"
+        # FA 需要登录态：把凭据面板露出来，并在日志里说清「要填什么、不填会怎样」。
+        # 已经能自动用上导出好的 cookie 时就别吓唬人 —— 那种情况直接开始就行。
         if site == "fa":
-            self._log(i18n.t("gui_fa_guide1"))
-            self._log(i18n.t("gui_fa_guide2"))
+            has_login = bool(self.fa_user_var.get().strip() and self.fa_pass_var.get().strip())
+            has_cookie = bool(self.fa_cookie_var.get().strip()) or FA_COOKIE.exists()
+            if has_login or has_cookie:
+                self._log(i18n.t("gui_fa_ready"))
+            else:
+                self._log(i18n.t("gui_fa_guide1"))
+                self._log(i18n.t("gui_fa_guide2"))
             if self._fa_prefilled:
                 self._log(i18n.t("gui_fa_loaded"))
         self._refresh_mode_options()
         self._sync_fa_panel()
+        self._apply_inputs()
+        # 切站就把这个站怎么填打在日志里 —— 单功能站（fa/wilddream）尤其需要
+        key = example_key(site, self.mode_var.get())
+        if key:
+            self._log(i18n.t(key))
+        self._fit_window()      # FA 面板展开会多占一块高度，窗口不够就把日志区压扁了
 
     def _sync_fa_panel(self):
         """按当前站点显示/收起「FA 凭据」面板。
@@ -383,6 +548,10 @@ class FelinepawGUI:
         self._log(">>> " + " ".join(cmd))
         env = dict(os.environ)
         env[i18n.LANG_ENV] = i18n.get_lang()
+        # ⚠️ 子进程的输出编码必须钉死成 utf-8。
+        #    py39 在管道里默认按系统代码页（GBK）写，而下面 Popen 按 utf-8 读 ——
+        #    只要不定这个变量，中文就全变乱码，用户看到的报错等于没看到。
+        env["PYTHONIOENCODING"] = "utf-8"
         # ⚠️ FA 的账号密码**不走命令行**，走环境变量。两个原因：
         #   ① 下面这行 `self._log(">>> " + " ".join(cmd))` 会把整条命令打进日志框，
         #      密码以 --pass 传就会被明文展示在界面上（还可能被用户截图/贴出去）；
@@ -422,22 +591,43 @@ class FelinepawGUI:
 
 
 def argparse_fix(site, ns):
-    """把 GUI 表单组装成命令行参数（复用 tool.build_command）。"""
+    """把 GUI 表单组装成命令行参数（复用 tool.build_command）。
+
+    ⚠️ 这里是「界面灰掉」的兑现处：被禁用的输入框里可能还留着上一个站点输入的文本，
+    StringVar 照样读得出来。所以先按 input_spec() 把用不上的项**置空**，
+    再走各站的专属规则。
+    """
     import argparse
     a = argparse.Namespace(**ns)
-    # e621 的 tags 模式用 --tags；其他模式用 target
-    if site in ("e621", "e926") and a.mode in ("tags", "page", "artist"):
-        if not a.tags:
+    spec = input_spec(site, a.mode or "")
+    # ⚠️ 界面灰掉 = 这里作废。控件禁用拦不住 StringVar：切站后旧文本照样读得出来，
+    #    漏给命令行会变成「明明没填却带了 --limit」这种怪事（build_command 只会打警告）。
+    for name in ("target", "tags", "page", "pick", "pages", "limit", "proxy"):
+        if not spec.get(name):
+            setattr(a, name, None)
+    for name, attr in (("skip_others", "skip_others"), ("force_pool", "force_pool_check"),
+                       ("pool_rev", "pool_rev"), ("force", "force"), ("dry_run", "dry_run")):
+        if not spec.get(name):
+            setattr(a, attr, False)
+    if site != "fa":
+        a.cookies = None        # FA 面板藏起来了，但它的路径还留在变量里
+
+    if site in ("e621", "e926"):
+        # e621 的 tags/page/artist 用 --tags；pool/pool-rev 用位置参数
+        if a.mode in ("tags", "page", "artist") and not a.tags:
             raise ValueError(i18n.t("gui_err_need_tags"))
-        a.target = None
+    if site == "yiff":
+        # yiff 的位置参数是标签：界面上的标签框 → 命令行位置参数
+        if not a.tags:
+            raise ValueError(i18n.t("tool_err_yiff_need"))
+        a.target, a.tags = a.tags, None
     if site == "bbooru":
-        # 标签框填了 → 按标签；否则目标框当作 pool（show URL 或纯 id）
+        if a.tags and a.target:
+            raise ValueError(i18n.t("tool_err_bbooru_exclusive"))
         if a.tags:
-            a.pool = None
-            a.target = None
+            a.pool, a.target = None, None
         elif a.target:
-            a.pool = a.target
-            a.target = None
+            a.pool, a.target = a.target, None
         else:
             raise ValueError(i18n.t("gui_err_bbooru_input"))
     if site == "wilddream":
@@ -447,9 +637,10 @@ def argparse_fix(site, ns):
     if site in ("hypnohub", "rule34us"):
         if not a.tags:
             raise ValueError(i18n.t("gui_err_site_need_tags", site=site))
-        a.target = None
     if site == "ehentai":
-        # 画廊 URL 走目标框，标签搜索走标签框；两者都没有就报错
+        # 两个框都填了不报错，但只会用标签那个 —— 与其静默丢掉一半，不如说清楚
+        if a.tags and a.target:
+            raise ValueError(i18n.t("gui_err_ehentai_both"))
         if not (a.tags or a.target or getattr(a, "from_manifest", None)):
             raise ValueError(i18n.t("gui_err_ehentai_input"))
     return tool.build_command(site, a)
