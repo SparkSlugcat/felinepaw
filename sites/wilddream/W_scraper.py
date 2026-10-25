@@ -148,6 +148,7 @@ def parse_args():
                         help=i18n.t("wd_help_limit"))
     parser.add_argument("-o", "--output", dest="output", default=".",
                         help=i18n.t("wd_help_output"))
+    parser.add_argument("--no-subdir", action="store_true", help=i18n.t("cli_no_subdir_help"))
     parser.add_argument("--threads", type=int, default=8,
                         help=i18n.t("wd_help_threads"))
     return parser.parse_args()
@@ -193,7 +194,8 @@ def main():
         print(i18n.t("wd_no_posts"))
         return
 
-    download_dir = os.path.join(os.path.abspath(args.output), file_name)
+    download_dir = (os.path.abspath(args.output) if args.no_subdir
+                    else os.path.join(os.path.abspath(args.output), file_name))
     os.makedirs(download_dir, exist_ok=True)
     print(i18n.t("wd_download_dir", path=download_dir))
 

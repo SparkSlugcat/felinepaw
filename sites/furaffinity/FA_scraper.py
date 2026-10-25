@@ -654,6 +654,7 @@ def main():
     parser = argparse.ArgumentParser(description=i18n.t("fa_cli_desc"))
     parser.add_argument("url", help=i18n.t("fa_help_url"))
     parser.add_argument("-o", "--output", default=None, help=i18n.t("fa_help_output"))
+    parser.add_argument("--no-subdir", action="store_true", help=i18n.t("cli_no_subdir_help"))
     parser.add_argument("-w", "--workers", type=int, default=4, help=i18n.t("fa_help_workers"))
     parser.add_argument("-d", "--delay", type=float, default=1.0, help=i18n.t("fa_help_delay"))
     parser.add_argument("--limit", default=None,
@@ -844,18 +845,22 @@ def main():
     if len(flat) < total:
         print(i18n.t("fa_limit_hint", rest=total - len(flat)))
 
-    # 作者模式再多套一层作者名：-o 往往是公共下载根目录（GUI 默认就是），
-    # 直接在里面铺几十个系列目录会把它彻底搞乱。
-    if artist_mode:
-        root = (Path(args.output) if args.output else Path(".")) / safe_name(artist)
+    # -o 一律当**根目录**：作者模式套一层作者名，单作品模式套一层系列名。
+    # 不加这层的话，同一个下载根会被好几个任务的图混在一起，认不出来。
+    # 想按老办法"我自己指定到哪个目录就下到哪个目录"→ 加 --no-subdir。
+    base = Path(args.output) if args.output else Path(".")
+    if args.no_subdir:
+        root = base
+    elif artist_mode:
+        root = base / safe_name(artist)
     else:
-        root = Path(args.output) if args.output else Path(safe_name(plan[0][0] or title))
+        root = base / safe_name(plan[0][0] or title)
     root.mkdir(parents=True, exist_ok=True)
 
-    # 目录规则：
+    # 目录规则（root 已经是"本次任务的目录"，见上）：
     #   作者模式 —— 真系列（>=2 张）各占一个编号目录，单张作品统一收进 _singles，
     #               免得根目录被几百张互不相干的图淹掉，也不会和专业目录混在一起；
-    #   单作品模式 —— 平铺，不套壳（用户 -o 指的就是这个系列自己的目录）。
+    #   单作品模式 —— 平铺在 root 里，不再往下套壳。
     used = {f[0] for f in flat}
     dir_of = {}
     gi = 0

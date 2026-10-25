@@ -51,6 +51,7 @@ create_session = common.create_session
 sanitize_filename = common.sanitize_filename
 find_existing_max = common.find_existing_max
 parse_limit = common.parse_limit
+task_dir = common.task_dir
 
 # ---------- 配置 ----------
 SITE_BASE = "https://yiffverse.com"
@@ -154,6 +155,7 @@ def main():
     parser = argparse.ArgumentParser(description=i18n.t("yf_cli_desc"))
     parser.add_argument("tag", help=i18n.t("yf_help_tag"))
     parser.add_argument("-o", "--output", default=None, help=i18n.t("yf_help_output"))
+    parser.add_argument("--no-subdir", action="store_true", help=i18n.t("cli_no_subdir_help"))
     parser.add_argument("--limit", default=None,
                         help=i18n.t("yf_help_limit"))
     parser.add_argument("--proxy", default=None,
@@ -192,8 +194,8 @@ def main():
                  images=sum(1 for p in posts if p[1] == 'image'),
                  videos=sum(1 for p in posts if p[1] == 'video')))
 
-    # 2. 输出目录 + 断点续传
-    out = Path(args.output) if args.output else Path(sanitize_filename(tag))
+    # 2. 输出目录 + 断点续传（-o 是根，默认再套一层标签名；--flat 取消）
+    out = common.task_dir(args.output, tag, args.no_subdir)
     out.mkdir(parents=True, exist_ok=True)
     existing_max = find_existing_max(out)
     start_index = existing_max + 1

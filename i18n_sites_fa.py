@@ -106,7 +106,7 @@ ZH_FA = {
     # ---------- FA_scraper.py：命令行 ----------
     "fa_cli_desc": "FurAffinity 系列作品爬虫（登录+系列识别）",
     "fa_help_url": "作品地址、作品编号，或作者名 —— 填作者名会下载他的整个画廊",
-    "fa_help_output": "保存目录（默认用作者名 / 系列名）",
+    "fa_help_output": "保存根目录，默认再套一层作者名（单作品模式套系列名）",
     "fa_help_workers": "并发线程数（默认4）",
     "fa_help_delay": "随机延迟上限秒（默认1.0）",
     "fa_help_limit": "下载数量: 正整数 或 inf(全部)；不填默认只下载前 120 个",
@@ -158,7 +158,7 @@ ZH_FA = {
     # ---------- yiff_scraper.py：命令行 ----------
     "yf_cli_desc": "下载 yiffverse.com 指定标签的最新图片/视频",
     "yf_help_tag": "标签名，例如 feline 或 jack-jackal_(character)",
-    "yf_help_output": "保存目录（默认以标签名命名）",
+    "yf_help_output": "保存根目录，默认再套一层标签名",
     "yf_help_limit": "下载数量: 正整数 或 inf(全部)；不填默认只下载前 120 个",
     "yf_help_proxy": "代理设置: 留空=自动检测, off=直连, 或 http://127.0.0.1:7897",
 
@@ -304,7 +304,7 @@ EN_FA = {
     # ---------- FA_scraper.py: command line ----------
     "fa_cli_desc": "FurAffinity series scraper (login + series detection)",
     "fa_help_url": "Submission URL / ID, or an artist name - an artist name downloads the whole gallery",
-    "fa_help_output": "Output directory (named after the artist / series by default)",
+    "fa_help_output": "Root output directory; artist name (or series name) is appended by default",
     "fa_help_workers": "Number of worker threads (default 4)",
     "fa_help_delay": "Max random delay in seconds (default 1.0)",
     "fa_help_limit": "How many to download: a positive integer or inf (all); defaults to the first 120",
@@ -356,7 +356,7 @@ EN_FA = {
     # ---------- yiff_scraper.py: command line ----------
     "yf_cli_desc": "Download the latest images/videos of a tag from yiffverse.com",
     "yf_help_tag": "Tag name, e.g. feline or jack-jackal_(character)",
-    "yf_help_output": "Output directory (named after the tag by default)",
+    "yf_help_output": "Root output directory; the tag name is appended by default",
     "yf_help_limit": "How many to download: a positive integer or inf (all); defaults to the first 120",
     "yf_help_proxy": "Proxy: empty = auto-detect, off = direct, or http://127.0.0.1:7897",
 

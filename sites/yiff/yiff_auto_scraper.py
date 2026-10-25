@@ -123,6 +123,7 @@ def main():
     parser = argparse.ArgumentParser(description=i18n.t("yf_auto_desc"))
     parser.add_argument("tag", help=i18n.t("yf_auto_help_tag"))
     parser.add_argument("-o", "--output", default=None, help=i18n.t("yf_help_output"))
+    parser.add_argument("--no-subdir", action="store_true", help=i18n.t("cli_no_subdir_help"))
     parser.add_argument("--max-pages", type=int, default=30, help=i18n.t("yf_help_max_pages"))
     parser.add_argument("--headless", action="store_true", help=i18n.t("yf_help_headless"))
     parser.add_argument("--list-only", action="store_true", help=i18n.t("yf_help_list_only"))
@@ -190,7 +191,8 @@ def main():
     else:
         print(i18n.t("yf_proxy_direct"))
 
-    out = Path(args.output) if args.output else Path(ys.sanitize_filename(tag))
+    # -o 是根目录，默认再套一层标签名；--flat 取消这层
+    out = ys.task_dir(args.output, tag, args.no_subdir)
     out.mkdir(parents=True, exist_ok=True)
     existing_max = ys.find_existing_max(out)
     start_index = existing_max + 1

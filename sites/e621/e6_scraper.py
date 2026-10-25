@@ -146,6 +146,7 @@ def main():
     parser = argparse.ArgumentParser(description=i18n.t("e6_tags_desc"))
     parser.add_argument("--tags", required=True, help=i18n.t("e6_tags_help"))
     parser.add_argument("--limit", type=int, default=None, help=i18n.t("e6_limit_help")) ;  parser.add_argument("-o", "--output", default=None, help=i18n.t("e6_output_help_tags"))
+    parser.add_argument("--no-subdir", action="store_true", help=i18n.t("cli_no_subdir_help"))
     args = parser.parse_args()
 
     tags = args.tags.strip()
@@ -166,11 +167,7 @@ def main():
     print(i18n.t("e6_total_found", n=len(all_ids)))
 
     # 确定输出目录
-    if args.output:
-        output_dir = Path(args.output)
-    else:
-        safe_tag = sanitize_filename(tags.replace(" ", "_"))
-        output_dir = Path(safe_tag)
+    output_dir = common.task_dir(args.output, tags.replace(" ", "_"), args.no_subdir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 2. 批量获取详细信息，构建可下载列表

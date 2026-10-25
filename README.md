@@ -197,7 +197,7 @@ Every field on the form, what it sets, and the one trap worth knowing:
 | **模式** | `--mode` | **只对 `e621` 和 `bbooru` 生效**，其它站点这格是空的。e621 可选 `tags` / `page` / `artist` / `pool` / `pool-rev`；bbooru 可选 `auto` / `api` / `html` / `artist` |
 | **目标网址** | 位置参数 | 只放**网址或编号**（作品 / 画廊 / 池子 URL，或纯数字 id）。用不上的站整格变灰 |
 | **标签** | `--tags` | 只放**标签**，多个用空格隔开，如 `cute fox`。用不上的站整格变灰 |
-| **输出目录** | `-o` | 图片存到哪。留空 = 当前目录 |
+| **输出根目录** | `-o` | 图片存到哪。**填的是根目录**，脚本会在它下面按标签/作者/池名再建一层；留空 = `.pawout` 里写的目录 |
 | **数量限制** | `--limit` | 下多少张。填 `inf` = 全部；**留空 = 脚本默认 120 张，不是全部** |
 | **代理** | `--proxy` | 留空 = 跟随系统代理；`off` = 直连；也可填 `http://127.0.0.1:端口` |
 | **页码(--page)** | `--page` | 只下某一页。对 e621 的 `page` 模式、bbooru、hypnohub、rule34us 有效。**留空 = 翻全部页** |
@@ -214,7 +214,8 @@ Every field on the form, what it sets, and the one trap worth knowing:
 > - **站点**：选站。`e926` 会被禁用（Cloudflare 拦截），想下安全版请用 `e621` 或浏览器。
 > - **模式**：只有 e621 / bbooru 有；e621 = 标签/分页/艺术家/池/池反转，bbooru = 自动/API/HTML/艺术家。
 > - **目标网址** 与 **标签**：网址/编号进「目标网址」，标签进「标签」；用不上的格子会变灰，见下一张表。
-> - **输出目录**：留空就下到当前目录，建议每次都点「浏览...」指定一个。
+> - **输出根目录**：填根目录就行，脚本自己按标签/作者/池名建子目录（`out/feline/`、`out/someartist/`）。
+>   想让它直接往你指定的那个目录里铺、不再套一层，命令行加 `--no-subdir`；GUI 没有这个开关，所以 GUI 一定会套一层。
 > - **数量限制**：`inf` = 全部；**留空不是"不限"，是脚本默认的 120 张**。
 > - **代理**：留空就跟随系统代理；提示连不上时，显式填你代理软件的 HTTP 端口（`http://127.0.0.1:端口`）。
 > - **页码**：留空 = 翻全部页；填了才只下那一页。
@@ -458,6 +459,9 @@ Download one specific collection, in order.
 - **No hardcoded credentials** — env vars / cookies only
 - **Console-safe output** — GBK-safe ASCII markers (no emoji that crash cp936 terminals)
 - **Uniform file naming** — `p<post_id>.<ext>` across the booru sites, so resume works across modes
+- **One rule for `-o`** — `-o` is always the **root**: the script appends one folder named after
+  the tag / artist / pool / gallery title, so two runs never dump into the same pile. Add
+  `--no-subdir` to drop that folder and use `-o` as the final directory
 
 > **中文**
 >
@@ -472,19 +476,23 @@ Download one specific collection, in order.
 > - **不硬编码凭据** —— 只用环境变量 / cookies
 > - **控制台安全输出** —— GBK 安全的 ASCII 标记（不用会让 cp936 终端崩掉的 emoji）
 > - **统一文件命名** —— booru 各站统一 `p<post_id>.<ext>`，跨模式也能续传
+> - **`-o` 只有一种含义** —— `-o` 永远是**根目录**，脚本在它下面按标签/作者/池名/画廊标题再建一层，
+>   两次任务不会把图倒进同一个坑里；`--no-subdir` 取消这层，`-o` 直接当最终目录
 
 ## 🚀 Usage / 用法
 
 ```bat
 :: e621（凭据可选，用环境变量）
 set E621_USER=yourname & set E621_KEY=yourkey
-python sites/e621/e6_scraper.py --tags feline -o ./feline
+python sites/e621/e6_scraper.py --tags feline -o ./out
+:: ^ 落到 ./out/feline/ （-o 是根目录）
 
 :: yiffverse（每标签 SSR 仅约 30 帖；浏览器版可滚动加载更多）
 python sites/yiff/yiff_scraper.py feline --limit 50
 
 :: e-hentai（单画廊）
-python sites/e-hentai/EH_scraper_v2.py "https://e-hentai.org/g/xxx/yyy/" -o ./gallery
+python sites/e-hentai/EH_scraper_v2.py "https://e-hentai.org/g/xxx/yyy/" -o ./out
+:: ^ 落到 ./out/<画廊标题>/
 
 :: e-hentai（标签搜索 → 只看名单，不下载）
 python sites/e-hentai/EH_scraper_v2.py --tags "language:chinese$ female:anal" --limit 30 --dry-run

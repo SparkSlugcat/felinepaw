@@ -512,6 +512,7 @@ def parse_args():
                         help="Download count: positive integer or 'inf' (default: 120)")
     parser.add_argument("-o", "--o", "--output", dest="output_dir", default='.',
                         help="Output root directory (default: current dir)")
+    parser.add_argument("--no-subdir", action="store_true", help="Put images directly into -o, without a tag subfolder")
     parser.add_argument("--proxy", default=None,
                         help="Proxy: empty=auto detect, off=direct, or URL like http://127.0.0.1:7897")
     parser.add_argument("--page", type=int, default=None,
@@ -536,7 +537,7 @@ def main():
 
     tags = args.tags.strip()
     folder_name = sanitize_filename(tags)
-    download_dir = os.path.join(args.output_dir, folder_name)
+    download_dir = args.output_dir if args.no_subdir else os.path.join(args.output_dir, folder_name)
 
     # ---- 代理设置 ----
     if args.proxy is None:

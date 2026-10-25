@@ -46,25 +46,25 @@ E621_SCRIPTS = {
 }
 # 各脚本支持的通用参数白名单（e621 旧脚本只有 -o）
 WHITELIST = {
-    "e6_scraper.py": ["-o", "--limit"],
-    "e6_taged_page_scraper.py": ["-o"],
-    "e6_artist.py": ["-o", "--dry-run", "--pick", "--manifest", "--from-manifest"],
-    "pool_scraper.py": ["-o"],
-    "e621.py": ["-o"],
-    "yiff_scraper.py": ["-o", "--limit", "--proxy"],
-    "yiff_auto_scraper.py": ["-o", "--limit", "--proxy", "--max-pages", "--headless"],
-    "EH_scraper_v2.py": ["-o", "--limit", "--proxy", "-w", "-d", "--cooldown", "--force",
+    "e6_scraper.py": ["-o", "--no-subdir", "--limit"],
+    "e6_taged_page_scraper.py": ["-o", "--no-subdir"],
+    "e6_artist.py": ["-o", "--no-subdir", "--dry-run", "--pick", "--manifest", "--from-manifest"],
+    "pool_scraper.py": ["-o", "--no-subdir"],
+    "e621.py": ["-o", "--no-subdir"],
+    "yiff_scraper.py": ["-o", "--no-subdir", "--limit", "--proxy"],
+    "yiff_auto_scraper.py": ["-o", "--no-subdir", "--limit", "--proxy", "--max-pages", "--headless"],
+    "EH_scraper_v2.py": ["-o", "--no-subdir", "--limit", "--proxy", "-w", "-d", "--cooldown", "--force",
                          "--no-preflight", "--dry-run", "--pick", "--pages",
                          "--from-manifest", "--manifest"],
     # --dry-run：FA_scraper.py 本身支持，之前漏在白名单外，GUI 勾了也被丢掉
-    "FA_scraper.py": ["-o", "--limit", "--proxy", "-w", "-d", "--cookies", "--dry-run"],
-    "B_scraper.py": ["-o", "--limit", "--proxy", "--adult", "--name", "--retry", "--dry-run",
+    "FA_scraper.py": ["-o", "--no-subdir", "--limit", "--proxy", "-w", "-d", "--cookies", "--dry-run"],
+    "B_scraper.py": ["-o", "--no-subdir", "--limit", "--proxy", "--adult", "--name", "--retry", "--dry-run",
                      "--mode", "--page", "--skip-others", "--pool-rev", "--force-pool-check",
                      "--delay", "--jitter", "--cooldown", "--force", "--no-preflight"],
-    "W_scraper.py": ["-o", "--limit"],
-    "H_scraper.py": ["-o", "--limit", "--proxy", "--adult", "--name", "--dry-run", "--page",
+    "W_scraper.py": ["-o", "--no-subdir", "--limit"],
+    "H_scraper.py": ["-o", "--no-subdir", "--limit", "--proxy", "--adult", "--name", "--dry-run", "--page",
                      "--delay", "--jitter", "--cooldown", "--force", "--no-preflight"],
-    "R_scraper.py": ["-o", "--limit", "--proxy", "--dry-run", "--page",
+    "R_scraper.py": ["-o", "--no-subdir", "--limit", "--proxy", "--dry-run", "--page",
                      "--delay", "--jitter", "--cooldown", "--force", "--no-preflight"],
 }
 
@@ -195,7 +195,8 @@ def build_command(site: str, args) -> list:
     def _add(flag, value):
         if value is not None and value is not False:
             if flag in allowed:
-                if flag in ("--headless", "--force", "--no-preflight", "--dry-run"):
+                if flag in ("--headless", "--force", "--no-preflight", "--dry-run",
+                "--no-subdir"):
                     cmd.extend([flag])
                 else:
                     cmd.extend([flag, str(value)])
@@ -218,6 +219,7 @@ def build_command(site: str, args) -> list:
     _add("--force", getattr(args, "force", False))
     _add("--no-preflight", getattr(args, "no_preflight", False))
     _add("--dry-run", getattr(args, "dry_run", False))
+    _add("--no-subdir", getattr(args, "no_subdir", False))
     _add("--pick", getattr(args, "pick", None))
     _add("--pages", getattr(args, "pages", None))
     _add("--from-manifest", getattr(args, "from_manifest", None))
@@ -250,6 +252,7 @@ def main():
                         help=i18n.t("tool_help_target"))
     # 通用
     parser.add_argument("-o", "--output", default=None, help=i18n.t("tool_help_output"))
+    parser.add_argument("--no-subdir", action="store_true", help=i18n.t("cli_no_subdir_help"))
     parser.add_argument("--limit", default=None, help=i18n.t("tool_help_limit"))
     parser.add_argument("--proxy", default=None, help=i18n.t("tool_help_proxy"))
     parser.add_argument("-w", "--workers", type=int, default=None, help=i18n.t("tool_help_workers"))

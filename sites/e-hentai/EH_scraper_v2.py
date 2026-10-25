@@ -446,6 +446,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p.add_argument("-o", "--output", default=None,
                    help=i18n.t("eh_help_output_nopawout"))
+    p.add_argument("--no-subdir", action="store_true", help=i18n.t("cli_no_subdir_help"))
     p.add_argument("--limit", default=None,
                    help=i18n.t("eh_help_limit", n=SEARCH_DEFAULT_LIMIT))
     p.add_argument("--pick", default=None,
@@ -658,7 +659,7 @@ def _download_gallery_manifest(payload, args, session, pacing):
     else:
         picked = list(enumerate(items, 1))
 
-    out = Path(args.output) if args.output else Path(safe_dir(title))
+    out = common.task_dir(args.output, title, args.no_subdir)
     out.mkdir(parents=True, exist_ok=True)
     print(i18n.t("eh_output_dir", path=out.resolve()))
 
@@ -742,7 +743,7 @@ def _run_search(args, session, pacing):
         picked = list(enumerate(items, 1))
 
     # ---------- 5. 逐画廊下载 ----------
-    out_root = Path(args.output) if args.output else Path(query_dir_name(query))
+    out_root = common.task_dir(args.output, query_dir_name(query), args.no_subdir)
     print(i18n.t("eh_output_root", path=out_root.resolve()))
 
     ok = skip = fail = 0
@@ -837,7 +838,7 @@ def _run_gallery(args, session, pacing):
                  workers=args.workers, delay=args.delay))
 
     # ---------- 5. 输出目录（修 v2 的 safe_name NameError） ----------
-    out = Path(args.output) if args.output else Path(safe_dir(title))
+    out = common.task_dir(args.output, title, args.no_subdir)
     out.mkdir(parents=True, exist_ok=True)
 
     # ---------- 6. 下载 ----------

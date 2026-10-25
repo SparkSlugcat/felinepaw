@@ -34,9 +34,9 @@ ZH_MISC = {
     "eh_help_url": "画廊 URL，例如 https://e-hentai.org/g/123456/abcdef1234/",
     "eh_help_tags": "标签搜索（与 URL 二选一）。语法: language:chinese$ / female:feline / "
                     "-male:feline / ~feline，空格分隔多个",
-    "eh_help_output": "保存目录。留空 = 读项目根 .pawout（无则当前目录）; "
-                      "搜索模式作为根目录，单画廊作为该画廊目录",
-    "eh_help_output_nopawout": "保存目录（搜索模式: 根目录; 单画廊: 该画廊目录）",
+    "eh_help_output": "保存根目录。留空 = 读项目根 .pawout（无则当前目录）；"
+                      "搜索模式套搜索词，单画廊模式套画廊标题",
+    "eh_help_output_nopawout": "保存根目录：搜索模式套搜索词，单画廊模式套画廊标题",
     "eh_help_limit": "搜索模式: 取前 N 个画廊（默认 {n}，inf=全部）; "
                      "单画廊模式: 下前 N 张图（默认 120）",
     "eh_help_pick": "按名单序号挑着下，如 2-4,7 / 3- / all（编号 = dry-run 看到的 #）",
@@ -171,11 +171,11 @@ EN_MISC = {
     "eh_help_url": "Gallery URL, e.g. https://e-hentai.org/g/123456/abcdef1234/",
     "eh_help_tags": "Tag search (either this or URL). Syntax: language:chinese$ / "
                     "female:feline / -male:feline / ~feline, space-separated",
-    "eh_help_output": "Save directory. Blank = read .pawout in the project root "
-                      "(else current dir); in search mode it is the root, in single "
-                      "gallery mode it is that gallery's folder",
-    "eh_help_output_nopawout": "Save folder (search mode: root dir; single gallery: "
-                               "that gallery's dir)",
+    "eh_help_output": "Root save directory. Blank = read .pawout in the project root "
+                      "(else current dir); search mode appends the query, single "
+                      "gallery mode appends the gallery title",
+    "eh_help_output_nopawout": "Root save directory: search mode appends the query, "
+                               "single gallery mode appends the gallery title",
     "eh_help_limit": "Search mode: take the first N galleries (default {n}, inf=all); "
                      "single gallery mode: download the first N images (default 120)",
     "eh_help_pick": "Pick by list index, e.g. 2-4,7 / 3- / all "

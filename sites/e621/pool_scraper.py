@@ -122,6 +122,7 @@ def main():
     parser = argparse.ArgumentParser(description=i18n.t("e6_seq_desc"))
     parser.add_argument("pool_url", help=i18n.t("e6_pool_url_help"))
     parser.add_argument("-o", "--output", default=None, help=i18n.t("e6_output_help_pool"))
+    parser.add_argument("--no-subdir", action="store_true", help=i18n.t("cli_no_subdir_help"))
     args = parser.parse_args()
 
     pool_url = args.pool_url.strip()
@@ -151,11 +152,7 @@ def main():
     print(i18n.t("e6_post_count", n=len(post_ids)))
 
     # 确定输出目录
-    if args.output:
-        output_dir = Path(args.output)
-    else:
-        safe_name = sanitize_filename(pool_name)
-        output_dir = Path(safe_name)
+    output_dir = common.task_dir(args.output, pool_name, args.no_subdir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 2. 分批次获取所有作品的详细信息，并构建可下载列表

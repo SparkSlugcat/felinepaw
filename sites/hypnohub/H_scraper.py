@@ -337,6 +337,7 @@ def parse_args():
                         help=i18n.t("hy_help_name"))
     parser.add_argument("-o", "--o", "--output", dest="output_dir", default='.',
                         help=i18n.t("hy_help_output"))
+    parser.add_argument("--no-subdir", action="store_true", help=i18n.t("cli_no_subdir_help"))
     parser.add_argument("--threads", type=int, default=8,
                         help=i18n.t("hy_help_threads"))
     parser.add_argument("--retry", type=int, default=2,
@@ -366,7 +367,7 @@ def main():
     tags = args.tags.strip()
     folder_name = sanitize_filename(args.name if args.name else tags)
     adult_flag = args.adult == 'y'
-    download_dir = os.path.join(args.output_dir, folder_name)
+    download_dir = args.output_dir if args.no_subdir else os.path.join(args.output_dir, folder_name)
 
     # 代理
     if args.proxy is None:

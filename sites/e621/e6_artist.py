@@ -347,6 +347,7 @@ def main():
         epilog=i18n.t("e6_artist_epilog", prog=os.path.basename(sys.argv[0])))
     parser.add_argument("--tags", default=None, help=i18n.t("e6_artist_tags_help"))
     parser.add_argument("-o", "--output", default=None, help=i18n.t("e6_artist_output_help"))
+    parser.add_argument("--no-subdir", action="store_true", help=i18n.t("cli_no_subdir_help"))
     parser.add_argument(
         "--skip-others",
         action="store_true",
@@ -426,10 +427,7 @@ def main():
                 print(i18n.t("e6_skip_others_applied", n=before - len(picked)))
 
     # ---------- 5. 输出目录 ----------
-    if args.output:
-        root_dir = Path(args.output)
-    else:
-        root_dir = Path(sanitize_filename(artist_tag or "artist"))
+    root_dir = common.task_dir(args.output, artist_tag or "artist", args.no_subdir)
     print(i18n.t("e6_output_root", path=root_dir.resolve()))
 
     # ---------- 6. 逐项下载 ----------

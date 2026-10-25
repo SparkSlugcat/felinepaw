@@ -604,3 +604,20 @@ def local_out_root(default: Optional[str] = None) -> Path:
     except OSError:
         pass
     return Path(default) if default else Path(".")
+
+
+def task_dir(output: Optional[str] = None, name: Optional[str] = None,
+             no_subdir: bool = False) -> Path:
+    """本次任务真正落盘的目录。
+
+    `-o/--output`、GUI 输出框、`.pawout` **一律是根目录**，不是最终目录；
+    脚本在根下再套一层任务名（标签 / 作者 / 池名 / 画廊标题 / 漫画名），
+    否则不同任务的图会平铺混在一起，下载根一会儿就认不出来了。
+
+    不想套这层就加 `--no-subdir`（`no_subdir=True`），此时根目录本身当最终目录用。
+    没给 `output` 时退回 `.pawout` / 当前目录。
+    """
+    root = Path(output).expanduser() if output else local_out_root()
+    if no_subdir or not name:
+        return root
+    return root / sanitize_filename(name)
