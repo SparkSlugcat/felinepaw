@@ -34,7 +34,7 @@ import i18n
 
 # ---------- 配置 ----------
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "User-Agent": "felinepaw/1.0 (by SparkSlugcat on e621; +https://github.com/SparkSlugcat/felinepaw)",
     "Accept": "application/json",
     "Accept-Language": "en-US,en;q=0.9",
     "DNT": "1",
@@ -218,18 +218,13 @@ def main():
         print(i18n.t("e6_no_images"))
         return
 
-    # 3. 断点续传准备
-    existing_max = 0
-    for f in output_dir.iterdir():
-        if f.is_file() and f.stem.isdigit():
-            num = int(f.stem)
-            if num > existing_max:
-                existing_max = num
-    start_index = existing_max + 1
+    # 3. 断点续传准备（按数值判已有，老文件不补零也认得出）
+    got = common.existing_seq(output_dir)
+    existing_max = max(got) if got else 0
     if existing_max > 0:
-        print(i18n.t("e6_resume_from", n=existing_max, start=start_index))
-
-
+        print(i18n.t("e6_resume_from", n=existing_max, start=existing_max + 1))
+    # 只在总数超过 999 时才加宽；目录里已有更宽的老序号也沿用
+    width = common.seq_width(len(downloadable), output_dir)
 
     # 4. 多线程下载
     downloaded = 0
@@ -240,14 +235,12 @@ def main():
     # 构建下载任务列表（仅含真正需要下载的任务）
     tasks = []
     for idx, (pid, url, ext) in enumerate(downloadable):
-        if idx < existing_max:
-            continue
-
-        target_index = start_index + (idx - existing_max)
-        filename = f"{target_index}.{ext}"
+        # 序号 = 本页结果里的位置，不随续传漂移
+        target_index = idx + 1
+        filename = "%0*d.%s" % (width, target_index, ext)
         filepath = output_dir / filename
 
-        if filepath.exists():
+        if target_index in got:
             print(i18n.t("e6_post_skip_tagged", idx=target_index, total=len(downloadable),
                          pid=pid, name=filename))
             with lock:

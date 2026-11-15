@@ -12,7 +12,7 @@ Yiffverse (yiffverse.com) 标签图片爬虫
     python yiff_scraper.py feline --limit inf     # 下载全部（该版本最多 30）
 
 特点：
-- 图片按顺序编号 1.jpg, 2.png ...（原图优先，自动探测真实扩展名）
+- 图片按顺序编号 001.jpg, 002.png ...（原图优先，自动探测真实扩展名）
 - 支持断点续传（已有数字文件自动跳过）
 - 自动跟随 Windows 系统代理（也可手动指定或关闭）
 - 请求间隔 1 秒，礼貌访问
@@ -50,6 +50,8 @@ import i18n
 create_session = common.create_session
 sanitize_filename = common.sanitize_filename
 find_existing_max = common.find_existing_max
+existing_seq = common.existing_seq
+seq_width = common.seq_width
 parse_limit = common.parse_limit
 task_dir = common.task_dir
 
@@ -194,23 +196,21 @@ def main():
                  images=sum(1 for p in posts if p[1] == 'image'),
                  videos=sum(1 for p in posts if p[1] == 'video')))
 
-    # 2. 输出目录 + 断点续传（-o 是根，默认再套一层标签名；--flat 取消）
+    # 2. 输出目录 + 断点续传（-o 是根，默认再套一层标签名；--no-subdir 取消）
     out = common.task_dir(args.output, tag, args.no_subdir)
     out.mkdir(parents=True, exist_ok=True)
-    existing_max = find_existing_max(out)
-    start_index = existing_max + 1
+    got = common.existing_seq(out)          # 按数值判已有，老的不补零文件也认得出
+    existing_max = max(got) if got else 0
     if existing_max > 0:
-        print(i18n.t("yf_resume", n=existing_max, start=start_index))
+        print(i18n.t("yf_resume", n=existing_max, start=existing_max + 1))
+    # 顺序编号至少 3 位；超过 999 张才加宽，目录里的老宽度也沿用
+    width = common.seq_width(len(posts), out)
 
     # 3. 下载（顺序编号，与列表顺序一致）
     downloaded = failed = skipped = 0
     for idx, (pid, kind, chunk) in enumerate(posts):
-        if idx < existing_max:           # 续传跳过已完成的
-            continue
-        target_index = start_index + (idx - existing_max)
-        filename = f"{target_index}.jpg"
-        filepath = out / filename        # 扩展名探测后如不同，会重命名
-        if filepath.exists():
+        target_index = idx + 1           # 序号 = 列表位置，不随续传漂移
+        if target_index in got:
             print(i18n.t("yf_skip_exists", idx=target_index, pid=pid))
             skipped += 1
             continue
@@ -233,7 +233,7 @@ def main():
             failed += 1
             continue
 
-        final_path = out / f"{target_index}.{real_ext}"
+        final_path = out / ("%0*d.%s" % (width, target_index, real_ext))
         if final_path.exists():
             print(i18n.t("yf_skip_exists_named", idx=target_index, pid=pid,
                          name=final_path.name))

@@ -26,6 +26,10 @@
 | #6 | yiff 自动模式 `requests` 未导入（原 BUGS B2） | `sites/yiff/yiff_auto_scraper.py:210` | 中（吞异常） | ✅ 已修复 | 2026-10-18 |
 | #7 | `probe.py` 的 `urlparse` 未导入（原 BUGS B3） | `felinepaw_auto/probe.py:36` | 低 | ✅ 已修复 | 2026-10-18 |
 | #8 | BBooru 用译文当模式身份（原 BUGS B4） | `sites/BBooru/gui/app.py:429` | 低（静默回退） | ✅ 已修复 | 2026-10-18 |
+| #9 | e621 Pool 的编号顺序被 API 返回序打乱（001 是池子最后一张） | `sites/e621/pool_scraper.py`、`sites/e621/e621.py` | 高（顺序全错，静默） | ✅ 已修复 | 2026-11-15 |
+| #10 | `pool_scraper` 续传时重复下载并整体错位 | `sites/e621/pool_scraper.py` | 高（重复占盘 + 顺序错） | ✅ 已修复 | 2026-11-15 |
+| #11 | 顺序编号不补零 → `10.jpg` 排在 `2.jpg` 前面 | yiff / yiff_auto / e621 三件套 / e-hentai | 中（排序错，内容不丢） | ✅ 已修复 | 2026-11-15 |
+| #12 | e621 脚本伪装浏览器 UA，匿名请求被 403 | `sites/e621/*.py`（5 个） | 高（无 key 时整个站不可用） | ✅ 已修复 | 2026-11-15 |
 
 **速览 / Quick scan** —— 每条一句话，细节点进对应小节：
 
@@ -481,3 +485,179 @@ def _on_mode_selected(self, event=None):
 ```
 
 切语言重建界面后模式身份不丢，且不再依赖译文比较。
+
+---
+
+## #9 e621 Pool 的编号顺序被 API 返回序打乱
+
+**严重级别**：高（顺序全错，而且**不报错**）
+
+**现象**
+
+`pool_scraper.py` 下载一个 Pool，`001.jpg` 不是池子里的第一张。池子越"人为排过序"，
+错得越明显。
+
+**根因**
+
+`posts.json?tags=id:A,B,C` 的**返回顺序跟请求里写的顺序无关** —— e621 是按 **id 降序**返回的。
+而 `downloadable` 是按 API 返回顺序 `append` 的，从没按 `pool.post_ids` 重排：
+
+```python
+for post in posts:                      # posts 是 API 顺序 = id 降序
+    downloadable.append((pid, url, ext))
+```
+
+于是「顺序编号」实际排的是 id 倒序，`001` 落地成池子的最后一张。
+
+`sites/e621/e621.py` 的 docstring 写着「反转编号版」，`reversed(downloadable)` 之后拿到的是
+id **升序** —— 两个方向都不是池序。当初那个「反转」选项，某种意义上是在给这个 bug 打补丁。
+
+**实测证据（2026-11-15，走 Clash 7897）**
+
+抽样 199 个 5~60 帖的 Pool，**44 个（22%）的 `post_ids` 不是升序**，也就是作者真的调整过顺序：
+
+```
+pool 60309  post_ids : [6811627, 6773744, 6794599, 6814220, 6819281]
+            API 返回 : [6819281, 6814220, 6811627, 6794599, 6773744]   ← 严格降序
+```
+
+**修复**
+
+```python
+order = {pid: i for i, pid in enumerate(post_ids)}
+downloadable.sort(key=lambda t: order.get(t[0], len(post_ids)))
+```
+
+`failed_ids`（拿不到 URL 的帖子）不在 `downloadable` 里，排完序缺位是正常的。
+
+**验证**
+
+真实下载 pool 60309（5 张），`001.png` 与池子第一张（pid=6811627）的 md5 完全一致：
+
+```
+期望 md5 : 1fc628d5bf17efec2a3127ebdf8a3223
+001.png  : 1fc628d5bf17efec2a3127ebdf8a3223
+```
+
+编号与 `post_ids` 逐位对应：001=6811627 / 002=6773744 / 003=6794599 / 004=6814220 / 005=6819281。
+
+---
+
+## #10 `pool_scraper` 续传时重复下载并整体错位
+
+**严重级别**：高（重复占盘 + 顺序错，且不报错）
+
+**现象**
+
+第一次跑到第 5 张中断，第二次重跑，池子的**第一张**被存成 `006.jpg`，后面依次 +5。
+
+**根因**
+
+续传用的是「接着最大序号往后编」，但循环里**没有跳过已下载任务的守卫**：
+
+```python
+start_index = existing_max + 1
+for idx in range(len(downloadable)):
+    target_index = start_index + idx        # idx=0 -> 6，而它其实是池子第 1 张
+```
+
+`e6_scraper.py` / `yiff_auto_scraper.py` 有 `if idx < existing_max: continue` 那道守卫，所以没炸；
+但它们写的 `start_index + (idx - existing_max)` 在代数上**恒等于 `idx + 1`** —— `start_index` 和
+`existing_max` 是纯粹的摆设，日志里"从 6 开始续传"是假的。
+
+**修复**
+
+编号改成「池内位置」，判重按**数值集合**：
+
+```python
+got = common.existing_seq(output_dir)      # {1, 2, 3, ...}
+for idx in range(len(downloadable)):
+    target_index = idx + 1                 # 池子第几张，幂等
+    if target_index in got: skip
+```
+
+顺带解决另一个场景：池子被作者插了新图，按位置编号不会整体错位（按「接着编」则会）。
+
+**验证**
+
+```
+删掉 004/005 后重跑  -> skipped 3, downloaded 2（001-003 未重下）
+把 001.png 改名 1.png 后重跑 -> skipped 5, downloaded 0（老的不补零文件也认得出）
+```
+
+---
+
+## #11 顺序编号不补零
+
+**严重级别**：中（内容不丢，只是排序错）
+
+**现象**
+
+`10.jpg` 排在 `2.jpg` 前面。Windows 资源管理器用自然排序看不出问题，但 Python `sorted()`、
+`ls`、部分播放器和同步工具会错。
+
+**根因**
+
+所有顺序编号的站都直接写 `f"{idx}.{ext}"`。
+
+**修复**
+
+`common.py` 新增三个函数，13 个脚本统一调用：
+
+| 函数 | 作用 |
+|---|---|
+| `seq_width(max_index, out_dir=None)` | 零填充宽度。**按本批最大序号算**（不是总数）—— `--pick 995-1000` 只有 6 张却要编到 1000；同时沿用目录里已有序号文件的宽度，防止续传跨 10 的幂时 `001` 和 `1000` 并存 |
+| `existing_seq(out_dir)` | 已有序号**集合**。按数值比，`1.jpg`（旧）和 `001.jpg`（新）都认得出 |
+| `find_existing_max(out_dir, max_width=5)` | 加了位数上限，只认 ≤5 位的纯数字文件名 |
+
+**注意**：`find_existing_max` 的位数上限不是可选项。e621 的 post id 是 6~7 位，混在同一目录里时
+`1234567.png` 会被当成「已经下了 123 万张」，续传直接把整批任务跳过。
+
+**验证**
+
+| 场景 | 结果 |
+|---|---|
+| yiff 下载 2 张 | `001.jpg` / `002.jpg` |
+| e621 pool 5 张 | `001.png` … `005.png` |
+| EH 序号 1 / 2 / 1000 | `0001.bin` / `0002.bin` / `1000.bin`（宽度取 4） |
+| EH 目录里已有不补零的 `3.jpg` | 认出、跳过、不覆盖 |
+| 目录有 `1.jpg` `002.jpg` `003.jpg.part` `1234567.jpg` | `existing_seq` = {1, 2}，`.part` 与 post id 都不算 |
+
+**遗留**：跨过 10 的幂时那几张（`1000.jpg` 必然是 4 位，而前面的 `001` 是 3 位）无法共存于同一宽度。
+彻底解决要重命名全部旧文件，风险大于收益，不做。
+
+---
+
+## #12 e621 脚本伪装浏览器 UA，匿名请求被 403
+
+**严重级别**：高（没设 `E621_USER` / `E621_KEY` 时整个站不可用）
+
+**现象**
+
+所有 e621 请求返回 403，或者直接 `SSLError(SSLZeroReturnError)`
+（Cloudflare 连 TLS 都不给握完）。
+
+**根因**
+
+五个脚本的 `User-Agent` 都是 Chrome 125 的浏览器串。e621 的 API 明确要求**描述性的 UA**
+（说明是什么程序、找谁），浏览器 UA 会被当成爬虫直接拦。
+
+**实测（2026-11-15，同一节点同一个 URL）**
+
+```
+UA = Mozilla/5.0 ... Chrome/125.0.0.0 Safari/537.36   -> 403（238 bytes）
+UA = felinepaw/1.0 (by SparkSlugcat)                 -> 200（395 bytes）
+```
+
+**修复**
+
+5 个文件统一改成：
+
+```python
+"User-Agent": "felinepaw/1.0 (by SparkSlugcat on e621; +https://github.com/SparkSlugcat/felinepaw)",
+```
+
+**附带发现**：e621 这几个脚本**没有 `--proxy` 参数**（B/H/R/W/FA/EH 都有），session 在模块
+import 时就建好了。本机靠系统代理或环境变量能跑，但换节点、或环境里有别的代理变量时没法显式指定。
+
+**未修**：`--proxy` 参数没加，属于跨 5 个文件的小重构，等下次动这几个脚本时一起做。

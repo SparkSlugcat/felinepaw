@@ -324,6 +324,7 @@ def fetch_gallery_links(session: requests.Session, gid: str, token: str,
     收够就停，一个 900 页的画廊从 47 个请求降到 1 个。
     """
     links = []
+    seen = set()          # 已收集的详情页链接，用来识别"超出页数后重复返回的页"
     page = 0
     while True:
         url = f"{SITE}/g/{gid}/{token}/?p={page}"
@@ -347,8 +348,17 @@ def fetch_gallery_links(session: requests.Session, gid: str, token: str,
 
         if not found:
             break
-        links.extend(found)
-        log(i18n.t("eh_gallery_links_page", page=page + 1, n=len(found),
+
+        # `?p=` 超出真实页数时 e-hentai **不返回空页**，而是重复已有内容。
+        # 只靠"本页是否满 20 个"判断，画廊页数正好是 20 的整数倍时会无限翻页
+        # （实测 40 张的画廊翻到第 24 页还在拿同样 20 个链接，永远停不下来）。
+        # 所以以"本页有没有新链接"为准。
+        new_found = [(h, f) for h, f in found if h not in seen]
+        if not new_found:
+            break
+        seen.update(h for h, _ in new_found)
+        links.extend(new_found)
+        log(i18n.t("eh_gallery_links_page", page=page + 1, n=len(new_found),
                    total=len(links)))
         if max_links and len(links) >= max_links:
             links = links[:max_links]
@@ -547,13 +557,18 @@ def _download_jobs(session, jobs, out, total, args, pacing):
     lock = threading.Lock()
     stat = {"ok": 0, "skip": 0, "fail": 0}
 
+    # 零填充宽度按本批**最大序号**算（--pick 跳号时按总数算会不够位），
+    # 并沿用目录里已有序号文件的宽度，免得续传跨过 10 的幂时 001 和 1000 并存。
+    width = common.seq_width(max((k for k, _u in jobs), default=0), out)
+    # 目录里已经下好的序号（按数值比，老的不补零文件 1.jpg 也认得出）。
+    # `.part` 残留的 stem 是「001.jpg」这种，不是纯数字，天然被排除。
+    got = common.existing_seq(out)
+
     def job(idx, detail_url):
         if pacing:
             pacing.wait()
-        # 断点续传：目录里已有 {idx}.<ext> 则跳过（--force 时重下）。
-        # 注意排除 .part —— 那是上轮下到一半的残留，不该被当成"已完成"。
-        existing = [p for p in out.glob(f"{idx}.*") if not p.name.endswith(".part")]
-        if not args.force and existing:
+        # 断点续传：目录里已有该序号则跳过（--force 时重下）。
+        if not args.force and idx in got:
             with lock:
                 stat["skip"] += 1
             print(i18n.t("eh_skip_exists", idx=idx))
@@ -563,7 +578,7 @@ def _download_jobs(session, jobs, out, total, args, pacing):
             if not img_url:
                 raise RuntimeError(i18n.t("eh_err_no_img_src"))
             ext = Path(urlparse(img_url).path).suffix.lstrip(".") or "jpg"
-            filepath = out / f"{idx}.{ext}"
+            filepath = out / ("%0*d.%s" % (width, idx, ext))
             tmp = filepath.with_suffix(filepath.suffix + ".part")
             with session.get(img_url, stream=True, timeout=30) as r:
                 r.raise_for_status()

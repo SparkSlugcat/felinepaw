@@ -458,7 +458,9 @@ Download one specific collection, in order.
   `-3` / `all`) lives in `common.py`, so other sites can reuse it
 - **No hardcoded credentials** — env vars / cookies only
 - **Console-safe output** — GBK-safe ASCII markers (no emoji that crash cp936 terminals)
-- **Uniform file naming** — `p<post_id>.<ext>` across the booru sites, so resume works across modes
+- **Consistent file naming** — booru sites use `<post_id>.<ext>`; the sites that number downloads
+  sequentially (e621 / yiffverse / e-hentai) use zero-padded `001.jpg`, so plain string sorting
+  matches numeric order instead of putting `10.jpg` before `2.jpg`
 - **One rule for `-o`** — `-o` is always the **root**: the script appends one folder named after
   the tag / artist / pool / gallery title, so two runs never dump into the same pile. Add
   `--no-subdir` to drop that folder and use `-o` as the final directory
@@ -475,7 +477,8 @@ Download one specific collection, in order.
 > - **名单工作流（e-hentai）** —— `--dry-run` 打印名单**并**存成 JSON 清单文件；`--pick 2-4,7` 精确下载这几行。搜索结果会随新投稿漂移，所以存下来的清单才是 `--pick` 可复现的关键（`--from-manifest eh_manifest.json --pick 2-4,7`）。同一套 `--pick` 语法（`2-4,7` / `3-` / `-3` / `all`）在 `common.py` 里，其他站点可以复用
 > - **不硬编码凭据** —— 只用环境变量 / cookies
 > - **控制台安全输出** —— GBK 安全的 ASCII 标记（不用会让 cp936 终端崩掉的 emoji）
-> - **统一文件命名** —— booru 各站统一 `p<post_id>.<ext>`，跨模式也能续传
+> - **统一文件命名** —— booru 各站用 `<post_id>.<ext>`；顺序编号的站（e621 / yiffverse / e-hentai）
+>   用零填充的 `001.jpg`，这样字符串排序就等于数值排序，不会出现 `10.jpg` 排在 `2.jpg` 前面
 > - **`-o` 只有一种含义** —— `-o` 永远是**根目录**，脚本在它下面按标签/作者/池名/画廊标题再建一层，
 >   两次任务不会把图倒进同一个坑里；`--no-subdir` 取消这层，`-o` 直接当最终目录
 
@@ -615,6 +618,24 @@ tick-box window grouped exactly like the CLI numbering, and then downloads only 
 > 预编译的 `BBoorupaw.exe` 发布在 [Releases](../../releases) 里，**不进仓库** —— 18 MB 的二进制塞进 git 历史会让每次 clone 都变重。
 > （v1 时叫 `BBooruPaw.exe`，v1.1 起与 spec 里的名字统一。）
 
+Before shipping a build, run the privacy scan — PyInstaller can bake source paths into the `.pyc`
+payload, so a binary built in a personal folder may carry the whole directory tree:
+
+```bat
+python check_privacy.py                              :: scan every dist\*.exe in the repo
+python check_privacy.py sites\BBooru\gui\dist\BBoorupaw.exe
+```
+
+It **fails only on path-shaped hits** — a full project path, `\username\`, or a parent folder name.
+A bare username merely warns: a three-letter string turns up in 20 MB of compressed data by pure
+chance, and a check that always goes red ends up being ignored. Output is ASCII-only so it survives
+a GBK console.
+
+> 发布任何构建之前先跑一遍隐私扫描 —— PyInstaller 会把源码路径烘进 `.pyc`，在个人目录里打出来的
+> exe 可能带着整棵目录树。它**只在路径形态命中时判失败**（完整项目路径、`\用户名\`、上级目录名）；
+> 裸用户名只告警 —— 三个字母在 20 MB 压缩数据里几乎必然出现几次，一刀切的检查最终会被无视。
+> 输出全 ASCII，GBK 终端不会乱码。
+
 ## 🔒 Security / 安全
 
 - Scripts contain **no real credentials**. e621 keys come from env vars; FA uses a local cookies file.
@@ -641,17 +662,20 @@ Every measured defect — symptom, root cause, fix and how it was verified — i
 > 所有实测过的缺陷（现象、根因、修法、验证方式）都记录在 **[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)**，
 > 附带状态与涉及文件。那里只收**能复现**的问题，不做猜测。
 
-All eight entries are fixed today. Two are still worth remembering, because they can make old logs
-look like new bugs / 八条目前全部已修，其中两条值得记住 —— 它们会让旧日志看起来像新 bug：
+All twelve entries are fixed today. Three are still worth remembering, because they can make old
+logs look like new bugs / 十二条目前全部已修，其中三条值得记住 —— 它们会让旧日志看起来像新 bug：
 
 | # | In one line / 一句话 |
 |---|---|
 | **#2** | e-hentai search is **cursor-paged**: `&page=N` is silently ignored, so a `page=N` loop re-fetches page 1 forever |
 | **#4** | `--pick` keeps the **original list index** in filenames; renumbering causes silent skips on resume |
+| **#9** | e621 returns batch queries **sorted by id descending**, so a pool must be re-sorted by `post_ids` or `001` is the *last* image |
 
 > **#2** e-hentai 搜索是**游标翻页**，`&page=N` 被静默忽略 —— 用 `page=N` 循环会一直重复下第一页。
 >
 > **#4** `--pick` 落盘保留**原名单序号**，重新编号会让续传静默跳图。
+>
+> **#9** e621 的批量查询**按 id 降序返回**，Pool 必须按 `post_ids` 重排，否则 `001` 是池子的最后一张。
 
 ## ⚠️ Disclaimers / 免责声明
 
@@ -714,6 +738,7 @@ tick the ones you want, then download), and **both a CLI and a GUI** in one fold
 ```
 felinepaw/
 ├── common.py               # shared base library / 公共基础库
+├── check_privacy.py        # pre-release scan of the built exe for local paths / 发布前扫 exe 里有没有本机路径
 ├── KNOWN_ISSUES.md         # verified issues, with repro + suggested fixes / 已复现的问题，含复现步骤与建议修法
 ├── TROUBLESHOOTING.md      # startup / dependency / proxy / rate-limit troubleshooting / 排错手册（启动、依赖、代理、限速）
 ├── assets/                 # icon + README banner / 图标与封面图

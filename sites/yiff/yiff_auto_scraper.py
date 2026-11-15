@@ -194,16 +194,19 @@ def main():
     # -o 是根目录，默认再套一层标签名；--flat 取消这层
     out = ys.task_dir(args.output, tag, args.no_subdir)
     out.mkdir(parents=True, exist_ok=True)
-    existing_max = ys.find_existing_max(out)
-    start_index = existing_max + 1
+    got = ys.existing_seq(out)              # 按数值判已有，老的不补零文件也认得出
+    existing_max = max(got) if got else 0
     if existing_max > 0:
-        print(i18n.t("yf_resume", n=existing_max, start=start_index))
+        print(i18n.t("yf_resume", n=existing_max, start=existing_max + 1))
+    # 顺序编号至少 3 位；超过 999 张才加宽，目录里的老宽度也沿用
+    width = ys.seq_width(len(posts), out)
 
     downloaded = failed = skipped = 0
     for idx, (pid, kind, chunk) in enumerate(posts):
-        if idx < existing_max:
+        target_index = idx + 1              # 序号 = 列表位置，不随续传漂移
+        if target_index in got:
+            skipped += 1
             continue
-        target_index = start_index + (idx - existing_max)
 
         exts = ys.VIDEO_EXTS if kind == "video" else ys.IMAGE_EXTS
         real_ext = None
@@ -222,7 +225,7 @@ def main():
             failed += 1
             continue
 
-        final_path = out / f"{target_index}.{real_ext}"
+        final_path = out / ("%0*d.%s" % (width, target_index, real_ext))
         if final_path.exists():
             print(i18n.t("yf_skip_exists_named", idx=target_index, pid=pid,
                          name=final_path.name))

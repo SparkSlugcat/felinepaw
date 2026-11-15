@@ -2,10 +2,11 @@
 """
 e621 / e926 Tags 图片爬虫
 用法示例：
-    python ./Spyder/scraper/e6_scraper.py --tags "aubrey_(iceink)"
-    python e621_tags_scraper.py --tags "aubrey_(iceink)" -o ./aubrey_pics
+    python e6_scraper.py --tags "aubrey_(iceink)"
+    python e6_scraper.py --tags "aubrey_(iceink)" -o ./aubrey_pics
 
-按顺序下载所有匹配标签的图片，编号 1.jpg, 2.png ...
+按顺序下载所有匹配标签的图片，编号 001.jpg, 002.png ...
+序列号 = 搜索结果里的位置（标签搜索没有固有顺序，固定按位置编号）
 支持登录（设置环境变量 E621_USER / E621_KEY，未设置=游客）
 """
 
@@ -31,7 +32,7 @@ import i18n
 
 # ---------- 配置 ----------
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "User-Agent": "felinepaw/1.0 (by SparkSlugcat on e621; +https://github.com/SparkSlugcat/felinepaw)",
     "Accept": "application/json",
     "Accept-Language": "en-US,en;q=0.9",
 
@@ -204,16 +205,13 @@ def main():
         print(i18n.t("e6_no_images"))
         return
 
-    # 3. 断点续传准备（与 Pool 爬虫相同）
-    existing_max = 0
-    for f in output_dir.iterdir():
-        if f.is_file() and f.stem.isdigit():
-            num = int(f.stem)
-            if num > existing_max:
-                existing_max = num
-    start_index = existing_max + 1
+    # 3. 断点续传准备（按数值判已有，老文件不补零也认得出）
+    got = common.existing_seq(output_dir)
+    existing_max = max(got) if got else 0
     if existing_max > 0:
-        print(i18n.t("e6_resume_from", n=existing_max, start=start_index))
+        print(i18n.t("e6_resume_from", n=existing_max, start=existing_max + 1))
+    # 只在总数超过 999 时才加宽；目录里已有更宽的老序号也沿用
+    width = common.seq_width(len(downloadable), output_dir)
 
     # 4. 下载
     downloaded = 0
@@ -221,14 +219,13 @@ def main():
     download_failed = []
 
     for idx, (pid, url, ext) in enumerate(downloadable):
-        if idx < existing_max:   # 跳过已下载完成的
-            continue
-
-        target_index = start_index + (idx - existing_max)
-        filename = f"{target_index}.{ext}"
+        # 序号 = 搜索结果里的位置。标签搜索没有固有顺序（API 默认最新在前），
+        # 固定按位置编号，重跑时编号才不会漂。
+        target_index = idx + 1
+        filename = "%0*d.%s" % (width, target_index, ext)
         filepath = output_dir / filename
 
-        if filepath.exists():
+        if target_index in got:
             print(i18n.t("e6_post_skip_plain", idx=target_index,
                          pid=pid, name=filename))
             skipped += 1

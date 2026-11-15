@@ -1,7 +1,9 @@
 ﻿#!/usr/bin/env python3
 """
 e621 / e926 Pool 爬虫（改进版）
-- 图片按作品顺序重命名为 1.jpg, 2.png ...
+- 图片按 **Pool 自己的顺序** 重命名为 001.jpg, 002.png ...
+  （e621 的批量查询是按 id 降序返回的，所以拿到数据后必须按 post_ids 重排，
+   否则 001 会变成池子的最后一张）
 - 原图不可用时自动下载 sample
 - 支持断点续传
 - 需要登录时，请设置环境变量 E621_USER / E621_KEY（未设置=游客）
@@ -29,7 +31,7 @@ import i18n
 
 # ---------- 配置 ----------
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "User-Agent": "felinepaw/1.0 (by SparkSlugcat on e621; +https://github.com/SparkSlugcat/felinepaw)",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.5",
 }
@@ -190,17 +192,19 @@ def main():
         print(i18n.t("e6_no_url_posts", n=len(failed_ids),
                      ids=", ".join(map(str, failed_ids))))
 
-    # 3. 确定起始序号（断点续传）
-    # 扫描输出目录中已有的 "数字.扩展名" 文件，找出最大序号
-    existing_max = 0
-    for f in output_dir.iterdir():
-        if f.is_file() and f.stem.isdigit():
-            num = int(f.stem)
-            if num > existing_max:
-                existing_max = num
-    start_index = existing_max + 1
+    # 2.5 按 pool 自己的顺序重排 —— 实测 posts.json?tags=id:... 是**按 id 降序**
+    # 返回的，跟请求里写的顺序无关；而 pool 的 post_ids 是上传者拖出来的阅读顺序。
+    # 不重排的话「顺序编号」实际排的是 id 倒序，001 会变成池子的最后一张。
+    order = {pid: i for i, pid in enumerate(post_ids)}
+    downloadable.sort(key=lambda t: order.get(t[0], len(post_ids)))
+
+    # 3. 断点续传：按数值判已有（老文件不补零也认得出）
+    got = common.existing_seq(output_dir)
+    existing_max = max(got) if got else 0
     if existing_max > 0:
-        print(i18n.t("e6_resume_seq", n=existing_max, start=start_index))
+        print(i18n.t("e6_resume_seq", n=existing_max, start=existing_max + 1))
+    # 只在总数超过 999 时才加宽；目录里已有更宽的老序号也沿用
+    width = common.seq_width(len(downloadable), output_dir)
 
     # 4. 顺序下载
     downloaded = 0
@@ -208,9 +212,16 @@ def main():
     download_failed = []
 
     for idx in range(len(downloadable)):
-        target_index = start_index + idx        # 绝对序号
+        # 序号 = 池内位置（第几张），不随续传漂移：池子被作者插了新图时，
+        # 按位置编号是幂等的；按「接着最大序号往后编」则整批错位。
+        target_index = idx + 1
         pid, url, ext = downloadable[idx]
-        filename = f"{target_index}.{ext}"
+        filename = "%0*d.%s" % (width, target_index, ext)
+        if target_index in got:
+            print(i18n.t("e6_post_skip_seq", idx=target_index,
+                         last=len(downloadable), pid=pid, name=filename))
+            skipped += 1
+            continue
         filepath = output_dir / filename
 
         if filepath.exists():

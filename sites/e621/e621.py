@@ -1,7 +1,7 @@
 ﻿#!/usr/bin/env python3
 """
 e621 / e926 Pool 爬虫（反转编号版）
-- 图片按作品顺序反着命名：Pool 中最后一张作品 → 1.jpg，倒数第二张 → 2.png ……
+- 图片按作品顺序反着命名：Pool 中最后一张作品 → 001.jpg，倒数第二张 → 002.png ……
 - 原图不可用时自动下载 sample
 - 支持断点续传（反转模式）
 - 需要登录时，请设置环境变量 E621_USER / E621_KEY（或修改下方占位符）
@@ -29,7 +29,7 @@ import i18n
 
 # ---------- 配置 ----------
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "User-Agent": "felinepaw/1.0 (by SparkSlugcat on e621; +https://github.com/SparkSlugcat/felinepaw)",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 "Accept-Encoding": "gzip, deflate, br",
@@ -225,50 +225,40 @@ def main():
         print(i18n.t("e6_nothing_to_download"))
         return
 
-    # 3. 断点续传准备（反转模式）
-    # 扫描目录中已有的数字文件名，找出最大序号
-    existing_max = 0
-    for f in output_dir.iterdir():
-        if f.is_file() and f.stem.isdigit():
-            num = int(f.stem)
-            if num > existing_max:
-                existing_max = num
+    # 2.5 先按 pool 自己的顺序重排，再反转 —— 只有这样「反转编号」才真的是池子倒序。
+    # 实测 posts.json?tags=id:... 是按 id 降序返回的，直接反转拿到的是 id 升序，
+    # 两个方向都不是池序。
+    order = {pid: i for i, pid in enumerate(post_ids)}
+    downloadable.sort(key=lambda t: order.get(t[0], len(post_ids)))
 
-    start_index = existing_max + 1
+    # 3. 断点续传准备（反转模式）：按数值判已有，老文件不补零也认得出
+    got = common.existing_seq(output_dir)
+    existing_max = max(got) if got else 0
     total_to_download = len(downloadable)
 
     if existing_max > 0:
-        print(i18n.t("e6_resume_reverse", n=existing_max, start=start_index))
+        print(i18n.t("e6_resume_reverse", n=existing_max, start=existing_max + 1))
     else:
         print(i18n.t("e6_start_reverse"))
 
-    # 4. 反向遍历下载
+    # 只在总数超过 999 时才加宽；目录里已有更宽的老序号也沿用
+    width = common.seq_width(total_to_download, output_dir)
+
+    # 4. 反向遍历下载：池子最后一张 -> 001
     downloaded = 0
     skipped = 0
     download_failed = []
-    # 已处理（含跳过）的作品计数器，用于序号计算和续传跳过
-    processed_count = 0
 
-    # 反转列表：从最后一个可下载作品开始
-    for pid, url, ext in reversed(downloadable):
-        # 续传时，跳过已经完成的作品
-        if processed_count < existing_max:
-            processed_count += 1
-            continue
-
-        # 计算当前作品的文件名序号
-        # processed_count 已经是已处理数量（包括之前跳过的），现有最大序号是 existing_max
-        # 当前作品是第 (processed_count + 1) 个，对应序号从 start_index 开始
-        target_index = start_index + (processed_count - existing_max)
-
-        filename = f"{target_index}.{ext}"
+    for idx, (pid, url, ext) in enumerate(reversed(downloadable)):
+        # 序号 = 反转后的位置（1 = 池子最后一张），不随续传漂移
+        target_index = idx + 1
+        filename = "%0*d.%s" % (width, target_index, ext)
         filepath = output_dir / filename
 
-        if filepath.exists():
+        if target_index in got:
             print(i18n.t("e6_post_skip", idx=target_index, total=total_to_download,
                          pid=pid, name=filename))
             skipped += 1
-            processed_count += 1
             continue
 
         print(i18n.t("e6_post_download", idx=target_index, total=total_to_download,
@@ -286,11 +276,8 @@ def main():
             download_failed.append(pid)
             if filepath.exists():
                 filepath.unlink()
-            # 即使失败，也占用一个序号（保证后续序号正确）
-            processed_count += 1
             continue
 
-        processed_count += 1
         time.sleep(REQUEST_DELAY)
 
     # 5. 汇总

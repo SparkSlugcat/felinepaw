@@ -136,12 +136,20 @@ def sanitize_filename(name: str) -> str:
     return name or "untitled"
 
 
-def find_existing_max(out_dir: Path) -> int:
-    """扫描目录中已有的数字文件名，返回最大序号（断点续传用）。"""
+SEQ_MAX_WIDTH = 5   # 纯数字文件名超过这么多位就不是序号，是 post id
+
+
+def find_existing_max(out_dir: Path, max_width: int = SEQ_MAX_WIDTH) -> int:
+    """扫描目录中已有的数字文件名，返回最大序号（断点续传用）。
+
+    max_width 只认位数不超过它的纯数字文件名。同一目录里混着按 post id
+    命名的文件（e621 是 6~7 位）时，不限制位数会把 1234567 当成序号 →
+    existing_max 变成上百万 → 续传把整批任务全跳过。
+    """
     max_num = 0
     try:
         for f in out_dir.iterdir():
-            if f.is_file() and f.stem.isdigit():
+            if f.is_file() and f.stem.isdigit() and len(f.stem) <= max_width:
                 try:
                     n = int(f.stem)
                 except ValueError:
@@ -151,6 +159,46 @@ def find_existing_max(out_dir: Path) -> int:
     except OSError:
         pass
     return max_num
+
+
+def existing_seq(out_dir: Path, max_width: int = SEQ_MAX_WIDTH) -> set:
+    """目录里已经存在图的序号集合（1-based），断点续传按**数值**判。
+
+    返回集合而不是最大值：`--pick` 跳号、以及老文件不补零（`1.jpg`）与新
+    文件补零（`001.jpg`）混在一起时，只有逐个比数值才不会漏判。
+    `.part` 是下到一半的残留下（`001.jpg.part` 的 stem 是 `001.jpg`，本来
+    就不是纯数字），天然被排除。
+    """
+    got = set()
+    try:
+        for f in out_dir.iterdir():
+            if f.is_file() and f.stem.isdigit() and len(f.stem) <= max_width:
+                got.add(int(f.stem))
+    except OSError:
+        pass
+    return got
+
+
+def seq_width(max_index: int, out_dir: Path = None,
+              max_width: int = SEQ_MAX_WIDTH) -> int:
+    """顺序编号的零填充宽度：至少 3 位。
+
+    按**本批最大序号**算，不是按任务总数 —— `--pick 995-1000` 这种跳号
+    只有 6 张图，却要编号到 1000，按总数算会得到 3 位、装不下 4 位数字。
+
+    同时沿用它目录里已有序号文件的宽度：否则续传跨过 10 的幂时
+    （999 张 → 1000 张）同一个目录会出现 `001` 和 `1000` 并存，
+    靠文件名排序的地方（Python / 播放器 / 部分同步工具）就会错位。
+    """
+    width = max(3, len(str(max(int(max_index), 1))))
+    if out_dir is not None:
+        try:
+            for f in out_dir.iterdir():
+                if f.is_file() and f.stem.isdigit() and len(f.stem) <= max_width:
+                    width = max(width, len(f.stem))
+        except OSError:
+            pass
+    return width
 
 
 def parse_limit(limit_str, total: int):
