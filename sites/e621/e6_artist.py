@@ -92,6 +92,50 @@ def sanitize_filename(name: str) -> str:
     return name
 
 
+def iter_posts(data) -> list[dict]:
+    """从 /posts.json 的响应里取出帖子列表
+
+    e621 在 2026-11 把接口改成顶层直接返回数组，旧的 {"posts": [...]} 没有了；
+    两种结构都认，免得下次再改回去又崩一遍
+    """
+    if isinstance(data, list):
+        return [p for p in data if isinstance(p, dict)]
+    if isinstance(data, dict):
+        posts = data.get("posts")
+        if isinstance(posts, list):
+            return [p for p in posts if isinstance(p, dict)]
+    return []
+
+
+def get_download_url(post: dict):
+    """取原图 URL 与扩展名，取不到时降级到 sample
+
+    新结构（2026-11 起）: files.original.url + files.meta.ext
+    旧结构（保留兼容）  : file.url + file.ext，其次 sample.url
+    """
+    files = post.get("files")
+    if isinstance(files, dict):
+        original = files.get("original") or {}
+        url = original.get("url")
+        if url:
+            return url, (files.get("meta") or {}).get("ext")
+        sample = files.get("sample") or {}
+        if sample.get("jpg"):
+            return sample["jpg"], "jpg"
+        if sample.get("webp"):
+            return sample["webp"], "webp"
+        return None, None
+
+    url = post.get("file", {}).get("url")
+    ext = post.get("file", {}).get("ext", "jpg")
+    if url:
+        return url, ext
+    url = post.get("sample", {}).get("url")
+    if url:
+        return url, post.get("sample", {}).get("ext") or ext or "jpg"
+    return None, None
+
+
 def fetch_all_post_ids(tags: str) -> list[int]:
     """获取匹配标签的所有帖子 ID（自动翻页）"""
     all_ids = []
@@ -107,7 +151,7 @@ def fetch_all_post_ids(tags: str) -> list[int]:
             resp = session.get(f"{API_BASE}/posts.json", params=params)
             resp.raise_for_status()
             data = resp.json()
-            posts = data.get("posts", [])
+            posts = iter_posts(data)
             if not posts:
                 break
             all_ids.extend(post["id"] for post in posts)
@@ -135,7 +179,7 @@ def fetch_posts_details_batch(post_ids: list[int]) -> list[dict]:
     resp = session.get(f"{API_BASE}/posts.json", params=params)
     resp.raise_for_status()
     data = resp.json()
-    return data.get("posts", [])
+    return iter_posts(data)
 
 
 def fetch_pool_info(pool_id: int) -> dict:
@@ -151,17 +195,12 @@ def fetch_pool_info(pool_id: int) -> dict:
 def download_post(post, output_dir: Path, lock: threading.Lock) -> bool:
     """下载单个帖子，返回是否成功"""
     pid = post["id"]
-    file_url = post.get("file", {}).get("url")
-    ext = post.get("file", {}).get("ext", "jpg")
-    if not file_url:
-        # 降级到 sample
-        file_url = post.get("sample", {}).get("url")
-        ext = post.get("sample", {}).get("ext", ext or "jpg")
+    file_url, ext = get_download_url(post)
     if not file_url:
         print(i18n.t("e6_post_no_url_skip_indent", pid=pid))
         return False
 
-    filename = f"{pid}.{ext}"
+    filename = f"{pid}.{ext or 'jpg'}"
     filepath = output_dir / filename
     if filepath.exists():
         return True   # 已存在视为成功
